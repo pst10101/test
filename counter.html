@@ -117,12 +117,21 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 <body>
 
 <!-- 1. 교실 고르기 -->
+<section class="screen center" id="scrWait" hidden>
+  <div class="card">
+    <p class="eyebrow">교실 태블릿</p>
+    <h1>교실 정보를 불러오는 중이에요</h1>
+  </div>
+</section>
+
 <section class="screen center" id="scrPick" hidden>
   <div class="card">
     <p class="eyebrow">교실 태블릿 설정</p>
     <h1>이 태블릿은 어느 교실에 둘까요?</h1>
+    <p class="err" id="pickNote" role="alert" hidden></p>
     <p>고르면 주소가 바뀌어요. 그 주소를 즐겨찾기에 넣어 두면 다음부터 바로 열려요.</p>
     <div class="pick-grid" id="pickGrid"></div>
+    <p id="pickEmpty" hidden>등록된 교실이 없어요. 담당자 화면에서 교실을 추가해 주세요.</p>
   </div>
 </section>
 
@@ -148,6 +157,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
     <p>카메라 권한을 물어보면 허용을 눌러 주세요. 태블릿은 교실 뒤쪽 높은 곳에서 교실 전체가 보이게 두고, 충전기를 꽂아 두세요.</p>
     <p class="chip" id="modelChip" data-s=""><i></i><span id="modelText">AI 모델 준비 중</span></p>
     <p class="err" id="readyErr" role="alert" hidden></p>
+    <p class="err" id="removedNote" role="status" hidden>이 교실은 담당자 화면에서 삭제됐어요. 방문자 화면에는 보이지 않아요.</p>
     <p class="auto-note" id="autoNote" role="status" hidden></p>
     <button type="button" class="primary" id="startBtn">카운트 시작</button>
     <div class="actions">
@@ -190,6 +200,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
         <span>세는 간격 <b class="num" id="stInt"></b></span>
       </div>
       <p class="msg" id="runMsg" role="alert" hidden></p>
+      <p class="msg" id="removedRun" role="status" hidden>이 교실은 담당자 화면에서 삭제됐어요. 방문자 화면에는 보이지 않아요.</p>
       <div class="actions" id="lockedActions">
         <button type="button" id="unlockBtn">담당자 메뉴</button>
       </div>
@@ -234,26 +245,68 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   var A = window.App;
   var $ = function (id) { return document.getElementById(id); };
   var CFG = A.counter;
-  var screens = ["scrPick", "scrLogin", "scrReady", "scrRun", "scrError"];
+  var screens = ["scrWait", "scrPick", "scrLogin", "scrReady", "scrRun", "scrError"];
   function show(id) { screens.forEach(function (s) { $(s).hidden = s !== id; }); }
 
   var params = new URLSearchParams(location.search);
-  var baseRoom = A.room(params.get("room"));
+  var roomParam = params.get("room");
 
   // ---------- 교실 고르기 ----------
-  if (!baseRoom) {
-    A.rooms.forEach(function (r) {
-      var b = A.el("button");
-      b.type = "button";
-      b.appendChild(A.el("b", null, r.id));
-      b.appendChild(A.el("span", null, r.title));
-      b.addEventListener("click", function () { location.search = "?room=" + encodeURIComponent(r.id); });
-      $("pickGrid").appendChild(b);
-    });
+  // 담당자 화면에서 추가·삭제한 교실도 반영해서 보여줘요.
+  function showPick(note) {
+    var infoMap = {}, gotInfo = false;
+    function draw() {
+      var list = A.mergeAll(infoMap);
+      var g = $("pickGrid");
+      g.innerHTML = "";
+      list.forEach(function (r) {
+        var b = A.el("button");
+        b.type = "button";
+        b.appendChild(A.el("b", null, r.id));
+        b.appendChild(A.el("span", null, r.title));
+        b.addEventListener("click", function () { location.search = "?room=" + encodeURIComponent(r.id); });
+        g.appendChild(b);
+      });
+      $("pickEmpty").hidden = !(gotInfo && !list.length);
+    }
+    $("pickNote").textContent = note || "";
+    $("pickNote").hidden = !note;
+    draw();
     show("scrPick");
-    return;
+    A.store({ auth: true }).then(function (s) {
+      s.onRooms(function (m) { infoMap = m; gotInfo = true; draw(); }, function () { gotInfo = true; draw(); });
+    }).catch(function () {});
   }
 
+  var baseRoom = A.room(roomParam);   // config.js에 적은 기본 교실
+  if (baseRoom) {
+    main(baseRoom);
+  } else if (roomParam) {
+    // config.js에 없으면 담당자 화면에서 새로 추가한 교실일 수 있어요. 서버에서 찾아봐요.
+    show("scrWait");
+    A.store({ auth: true }).then(function (s) {
+      var done = false, unsub = null;
+      function finish(info) {
+        if (done) return;
+        done = true;
+        if (unsub) { try { unsub(); } catch (e) {} }
+        var found = null;
+        var m = {}; m[roomParam] = info;
+        A.mergeAll(m).forEach(function (r) { if (r.id === roomParam) found = r; });
+        if (found) main(found);
+        else showPick("‘" + roomParam + "’ 교실을 찾을 수 없어요. 삭제됐거나 주소가 틀렸을 수 있어요. 아래에서 다시 골라 주세요.");
+      }
+      unsub = s.onRoomInfo(roomParam, finish, function () { finish(null); });
+      if (done && unsub) { try { unsub(); } catch (e) {} }
+      // 서버 응답이 한참 없으면 연결 오류로 안내해요
+      setTimeout(function () { if (!done) { done = true; show("scrError"); } }, 15000);
+    }).catch(function () { show("scrError"); });
+  } else {
+    showPick();
+  }
+
+  // 아래부터는 교실이 정해진 뒤에 실행돼요.
+  function main(baseRoom) {
   var room = Object.assign({}, baseRoom);
   document.title = room.id + " 카운터";
   function changeRoom() { location.search = ""; }
@@ -304,6 +357,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
     if (s.demo) $("readyDemo").hidden = false;
     s.onRoomInfo(room.id, function (info) {
       room = A.mergeRoom(baseRoom, info);
+      var gone = A.isRemoved(info);
+      $("removedNote").hidden = !gone;
+      $("removedRun").hidden = !gone;
       renderRoomInfo();
     }, function () {});
     s.onAuth(function (user) {
@@ -584,6 +640,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden && running && !wakeLock) requestWake();
   });
+  }   // main() 끝
 })();
 </script>
 </body>

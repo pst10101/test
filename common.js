@@ -5,9 +5,12 @@
 
   var C = window.APP_CONFIG || {};
   var COUNTER = Object.assign({ intervalSec: 5, minScore: 0.5, heartbeatSec: 60, refreshMin: 5 }, C.counter || {});
+  // config.js에 적은 기본 교실 목록. 관리 화면에서 추가·삭제한 내용은 아래 mergeAll()이 겹쳐서 보여줘요.
   var rooms = (C.rooms || []).map(function (r) {
     return Object.assign({ normalAt: 8, busyAt: 16, desc: "", hours: "", title: "" }, r);
   });
+  var baseById = {};
+  rooms.forEach(function (r) { baseById[r.id] = r; });
   var fb = C.firebase || {};
   var demo = !(fb.apiKey && fb.projectId);
 
@@ -27,35 +30,90 @@
     return null;
   }
 
-  function floors() {
+  // list를 넘기면 그 목록 기준, 안 넘기면 config.js 기본 목록 기준
+  function floors(list) {
     var seen = {};
-    rooms.forEach(function (r) { seen[r.floor] = true; });
+    (list || rooms).forEach(function (r) { seen[r.floor] = true; });
     return Object.keys(seen).map(Number).sort(function (a, b) { return b - a; });
   }
 
-  function grades() {
+  function grades(list) {
     var seen = {};
-    rooms.forEach(function (r) { if (r.grade != null) seen[r.grade] = true; });
+    (list || rooms).forEach(function (r) { if (r.grade != null) seen[r.grade] = true; });
     return Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
   }
 
-  // 관리 화면에서 고칠 수 있는 항목 (나머지는 config.js에서)
-  var EDITABLE = ["title", "desc", "hours", "normalAt", "busyAt"];
+  // 관리 화면에서 고칠 수 있는 항목
+  var EDITABLE = ["title", "desc", "hours", "normalAt", "busyAt", "name", "grade", "floor"];
+  var NUMERIC = { normalAt: 1, busyAt: 1, grade: 1, floor: 1 };
+
+  function validField(k, v) {
+    if (v === undefined || v === null) return false;
+    if (NUMERIC[k]) return typeof v === "number" && isFinite(v);
+    if (k === "name") return typeof v === "string" && v.replace(/\s/g, "") !== "";
+    return true;
+  }
 
   function mergeRoom(base, remote) {
     var r = Object.assign({}, base);
     if (remote) {
       EDITABLE.forEach(function (k) {
-        if (remote[k] !== undefined && remote[k] !== null) r[k] = remote[k];
+        if (validField(k, remote[k])) r[k] = remote[k];
       });
       if (remote.editedAt) r.editedAt = remote.editedAt;
     }
     return r;
   }
 
-  function mergeAll(map) {
-    return rooms.map(function (r) { return mergeRoom(r, map && map[r.id]); });
+  function byId(a, b) {
+    return String(a.id).localeCompare(String(b.id), "ko", { numeric: true });
   }
+
+  function isRemoved(m) { return !!m && m.removed === true; }
+
+  // 관리 화면에서 새로 만든 교실 (config.js에 없는 것)
+  function customRoom(id, m) {
+    if (!m || m.custom !== true || !validField("name", m.name) || !validField("floor", m.floor)) return null;
+    var base = { id: id, custom: true, grade: null, title: "", desc: "", hours: "", normalAt: 8, busyAt: 16 };
+    return mergeRoom(base, m);
+  }
+
+  // 방문자에게 보여줄 최종 교실 목록:
+  //  config.js 기본 목록 (삭제 표시된 것은 뺌) + 관리 화면에서 추가한 교실 (id 순서로 뒤에 붙임)
+  function mergeAll(map) {
+    map = map || {};
+    var out = [], extra = [];
+    rooms.forEach(function (r) {
+      if (isRemoved(map[r.id])) return;
+      out.push(mergeRoom(r, map[r.id]));
+    });
+    Object.keys(map).forEach(function (id) {
+      if (baseById[id] || isRemoved(map[id])) return;
+      var r = customRoom(id, map[id]);
+      if (r) extra.push(r);
+    });
+    extra.sort(byId);
+    return out.concat(extra);
+  }
+
+  // 삭제 표시된 교실 (되살릴 수 있어요)
+  function removedRooms(map) {
+    map = map || {};
+    var out = [], extra = [];
+    rooms.forEach(function (r) {
+      if (isRemoved(map[r.id])) out.push(mergeRoom(r, map[r.id]));
+    });
+    Object.keys(map).forEach(function (id) {
+      if (baseById[id] || !isRemoved(map[id])) return;
+      var r = customRoom(id, map[id]);
+      if (r) extra.push(r);
+    });
+    extra.sort(byId);
+    return out.concat(extra);
+  }
+
+  // 학년·반 번호로 교실 id 만들기 (예: 2학년 3반 → "2-3")
+  function makeId(grade, cls) { return grade + "-" + cls; }
 
   function levelFromCount(r, n) {
     if (n >= r.busyAt) return 2;
@@ -183,6 +241,12 @@
         saveRoom: function (id, data) {
           return db.collection("rooms").doc(id).set(Object.assign({}, data, { editedAt: ts() }), { merge: true });
         },
+        // 교실을 완전히 지움 (교실 정보 + 혼잡도 + 태블릿 상태). 되돌릴 수 없어요.
+        deleteRoom: function (id) {
+          var b = db.batch();
+          ["rooms", "status", "devices"].forEach(function (c) { b.delete(db.collection(c).doc(id)); });
+          return b.commit();
+        },
         writeStatus: function (id, level, count) {
           return db.collection("status").doc(id).set({ level: level, count: count, updatedAt: ts() }, { merge: true });
         },
@@ -226,6 +290,7 @@
     });
     // 현실감을 위해: 하나는 태블릿 꺼짐, 하나는 배터리 부족, 하나는 담당자가 직접 설정
     var off = rooms[5], low = rooms[8], man = rooms[12];
+    var offId = off ? off.id : null;
     if (off) { status[off.id].updatedAt = now - 31 * 60000; devices[off.id].at = now - 29 * 60000; }
     if (low) { devices[low.id].battery = 0.14; devices[low.id].charging = false; }
     if (man) { status[man.id].override = 2; status[man.id].overrideAt = now - 6 * 60000; }
@@ -250,9 +315,10 @@
 
     setInterval(function () {
       var r = rooms[Math.floor(Math.random() * rooms.length)];
-      if (!r || r === off) return;
+      if (!r || r.id === offId) return;
       var st = status[r.id];
-      var c = Math.max(0, st.count + Math.round((Math.random() - 0.45) * 6));
+      if (!st || !devices[r.id]) return;
+      var c = Math.max(0, (st.count || 0) + Math.round((Math.random() - 0.45) * 6));
       st.count = c;
       st.level = levelFromCount(r, c);
       st.updatedAt = Date.now();
@@ -268,6 +334,7 @@
       onRooms: function (cb) { return sub(infoSubs, cb, function () { cb(clone(info)); }); },
       onRoomInfo: function (id, cb) { return sub(infoRoomSubs, { id: id, cb: cb }, function () { cb(info[id] ? clone(info[id]) : null); }); },
       saveRoom: function (id, data) { info[id] = Object.assign(info[id] || {}, data, { editedAt: Date.now() }); emitInfo(); return Promise.resolve(); },
+      deleteRoom: function (id) { delete info[id]; delete status[id]; delete devices[id]; emit(); emitInfo(); return Promise.resolve(); },
       writeStatus: function (id, level, count) { status[id] = Object.assign(status[id] || {}, { level: level, count: count, updatedAt: Date.now() }); emit(); return Promise.resolve(); },
       writeDevice: function (id, data) { devices[id] = Object.assign(devices[id] || {}, data, { at: Date.now() }); emit(); return Promise.resolve(); },
       setOverride: function (id, level) { status[id] = Object.assign(status[id] || {}, { override: isLevel(level) ? level : null, overrideAt: Date.now() }); emit(); return Promise.resolve(); },
@@ -323,7 +390,7 @@
       demo: false,
       rest: true,
       onStatus: function (cb, err) { return poll("status", 60000, cb, err); },
-      onRooms: function (cb, err) { return poll("rooms", 600000, cb, err); }
+      onRooms: function (cb, err) { return poll("rooms", 120000, cb, err); }
     };
   }
 
@@ -357,6 +424,9 @@
     EDITABLE: EDITABLE,
     mergeRoom: mergeRoom,
     mergeAll: mergeAll,
+    removedRooms: removedRooms,
+    isRemoved: isRemoved,
+    makeId: makeId,
     floors: floors,
     grades: grades,
     LEVELS: LEVELS,

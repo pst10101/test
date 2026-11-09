@@ -154,46 +154,60 @@
   $("eventName").textContent = A.config.eventName || "";
   if (A.demo) $("demoTag").hidden = false;
 
-  var statusMap = {}, infoMap = {}, gotStatus = false, connErr = false, mode = "";
+  var statusMap = {}, infoMap = {}, gotStatus = false, gotInfo = false, connErr = false, mode = "";
 
   // ---------- 시계 ----------
   function pad(n) { return (n < 10 ? "0" : "") + n; }
   function tickClock() { var d = new Date(); $("clock").textContent = pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   tickClock(); setInterval(tickClock, 10000);
 
-  // ---------- 층별 칸 (한 번만 만들기) ----------
-  var floors = A.floors();
-  var maxCols = 1;
-  floors.forEach(function (f) { maxCols = Math.max(maxCols, A.rooms.filter(function (r) { return r.floor === f; }).length); });
-  document.documentElement.style.setProperty("--cols", String(maxCols));
+  // ---------- 층별 칸 (교실이 추가·삭제돼 목록이 바뀔 때만 다시 만들어요) ----------
+  var tiles = {}, builtSig = null;
+  function sigOf(list) {
+    return (gotInfo ? "i:" : "l:") + list.map(function (r) { return [r.id, r.floor].join("|"); }).join(",");
+  }
+  function build(list) {
+    var floors = A.floors(list);
+    var maxCols = 1;
+    floors.forEach(function (f) { maxCols = Math.max(maxCols, list.filter(function (r) { return r.floor === f; }).length); });
+    document.documentElement.style.setProperty("--cols", String(maxCols));
 
-  var tiles = {};
-  floors.forEach(function (f) {
-    var sec = A.el("section", "floor");
-    var h = A.el("h2", "floor-no");
-    h.appendChild(A.el("b", null, String(f)));
-    h.appendChild(document.createTextNode("층"));
-    var hall = A.el("div", "hall");
-    A.rooms.filter(function (r) { return r.floor === f; }).forEach(function (r) {
-      var d = A.el("div", "room");
-      var top = A.el("div", "room-top");
-      top.appendChild(A.el("span", "room-no", r.id));
-      var lv = A.el("span", "room-lv");
-      top.appendChild(lv);
-      var t = A.el("div", "room-title");
-      var hrs = A.el("div", "room-hours");
-      d.appendChild(top); d.appendChild(t); d.appendChild(hrs);
-      hall.appendChild(d);
-      tiles[r.id] = { box: d, lv: lv, title: t, hours: hrs };
+    tiles = {};
+    $("floors").innerHTML = "";
+    if (!list.length) {
+      $("floors").appendChild(A.el("p", "quiet-empty", gotInfo ? "아직 등록된 교실이 없어요." : "교실 목록을 불러오는 중이에요."));
+    }
+    floors.forEach(function (f) {
+      var sec = A.el("section", "floor");
+      var h = A.el("h2", "floor-no");
+      h.appendChild(A.el("b", null, String(f)));
+      h.appendChild(document.createTextNode("층"));
+      var hall = A.el("div", "hall");
+      list.filter(function (r) { return r.floor === f; }).forEach(function (r) {
+        var d = A.el("div", "room");
+        var top = A.el("div", "room-top");
+        top.appendChild(A.el("span", "room-no", r.id));
+        var lv = A.el("span", "room-lv");
+        top.appendChild(lv);
+        var t = A.el("div", "room-title");
+        var hrs = A.el("div", "room-hours");
+        d.appendChild(top); d.appendChild(t); d.appendChild(hrs);
+        hall.appendChild(d);
+        tiles[r.id] = { box: d, lv: lv, title: t, hours: hrs };
+      });
+      sec.appendChild(h); sec.appendChild(hall);
+      $("floors").appendChild(sec);
     });
-    sec.appendChild(h); sec.appendChild(hall);
-    $("floors").appendChild(sec);
-  });
+    builtSig = sigOf(list);
+  }
 
   // ---------- 그리기 ----------
   function render() {
     var now = Date.now();
-    var items = A.mergeAll(infoMap).map(function (r) { return { r: r, e: A.effective(statusMap[r.id], now) }; });
+    // 교실 목록(추가·삭제 반영)을 한 번 받은 뒤에 그려요. 지운 교실이 잠깐 보이는 걸 막기 위해서예요.
+    var list = gotInfo ? A.mergeAll(infoMap) : [];
+    if (sigOf(list) !== builtSig) build(list);
+    var items = list.map(function (r) { return { r: r, e: A.effective(statusMap[r.id], now) }; });
     items.forEach(function (it) {
       var t = tiles[it.r.id];
       t.box.setAttribute("data-l", A.levelKey(it.e.level));
@@ -208,6 +222,7 @@
       .sort(function (a, b) { return (a.e.count || 0) - (b.e.count || 0); })
       .slice(0, 5);
     if (!gotStatus) q.appendChild(A.el("p", "quiet-empty", "교실 상황을 불러오는 중이에요."));
+    else if (!list.length) { /* 등록된 교실이 없을 땐 왼쪽 안내만 보여줘요 */ }
     else if (!quiet.length) q.appendChild(A.el("p", "quiet-empty", "지금은 여유 있는 교실이 없어요."));
     else quiet.forEach(function (it) {
       var d = A.el("div", "quiet-item");
@@ -228,6 +243,8 @@
   }
   render();
   setInterval(render, 20000);
+  // 교실 정보가 8초 안에 안 오면 config.js 기본 목록으로라도 보여줘요
+  setTimeout(function () { if (!gotInfo) { gotInfo = true; render(); } }, 8000);
 
   // ---------- 데이터: 실시간 연결, 안 되면 1분마다 받아오기 ----------
   var unsubs = [];
@@ -237,7 +254,8 @@
     mode = m;
     unsubs.push(store.onStatus(function (map) { statusMap = map; gotStatus = true; connErr = false; render(); },
       function () { connErr = true; render(); }));
-    unsubs.push(store.onRooms(function (map) { infoMap = map; render(); }, function () {}));
+    unsubs.push(store.onRooms(function (map) { infoMap = map; gotInfo = true; render(); },
+      function () { gotInfo = true; render(); }));
   }
   function fallback() { if (mode !== "rest" && !A.demo) use(A.restStore(), "rest"); }
 

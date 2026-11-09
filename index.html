@@ -122,6 +122,7 @@
     <span class="pill" data-l="none">정보 없음</span>
   </div>
 
+  <p class="quiet-empty" id="emptyMsg" hidden></p>
   <section class="map" id="mapView" role="tabpanel" aria-labelledby="tabMap"></section>
   <section class="list" id="listView" role="tabpanel" aria-labelledby="tabList" hidden></section>
 
@@ -160,25 +161,9 @@
   $("eventName").textContent = A.config.eventName || "";
 
   var statusMap = {}, infoMap = {};
-  var gotStatus = false, connErr = false;
+  var gotStatus = false, gotInfo = false, connErr = false;
   var gradeSel = 0;
   var openId = null;
-
-  // ---------- 학년 필터 ----------
-  var gradeBtns = [];
-  [0].concat(A.grades()).forEach(function (g) {
-    var b = A.el("button", "chip", g ? g + "학년" : "전체");
-    b.type = "button";
-    b.setAttribute("aria-pressed", g === 0 ? "true" : "false");
-    b.addEventListener("click", function () {
-      gradeSel = g;
-      gradeBtns.forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
-      render();
-    });
-    gradeBtns.push(b);
-    $("grades").appendChild(b);
-  });
-  if (A.grades().length < 2) $("grades").hidden = true;
 
   // ---------- 보기 전환 ----------
   function setView(v) {
@@ -193,43 +178,78 @@
   $("tabList").addEventListener("click", function () { setView("list"); });
   try { if (localStorage.getItem("congestion-view") === "list") setView("list"); } catch (e) {}
 
-  // ---------- 지도·목록 칸 만들기 (한 번만) ----------
-  var tiles = {}, rows = {};
-  A.floors().forEach(function (f) {
-    var sec = A.el("section", "floor");
-    var h = A.el("h2", "floor-no");
-    h.appendChild(A.el("b", null, String(f)));
-    h.appendChild(document.createTextNode("층"));
-    var hall = A.el("div", "hall");
-    A.rooms.filter(function (r) { return r.floor === f; }).forEach(function (r) {
-      var b = A.el("button", "room");
+  // ---------- 학년 필터 · 지도 · 목록 칸 만들기 ----------
+  // 담당자가 교실을 추가·삭제하면 목록이 바뀌어요. 바뀔 때만 다시 만들어요.
+  var gradeBtns = [], tiles = {}, rows = {};
+  var builtSig = null, curList = [];
+
+  function sigOf(list) {
+    return list.map(function (r) { return [r.id, r.floor, r.grade, r.name].join("|"); }).join(",");
+  }
+
+  function build(list) {
+    // 학년 필터
+    var gl = A.grades(list);
+    if (gradeSel && gl.indexOf(gradeSel) < 0) gradeSel = 0;
+    $("grades").innerHTML = "";
+    gradeBtns = [];
+    [0].concat(gl).forEach(function (g) {
+      var b = A.el("button", "chip", g ? g + "학년" : "전체");
       b.type = "button";
-      var top = A.el("span", "room-top");
-      top.appendChild(A.el("span", "room-no", r.id));
-      var lv = A.el("span", "room-lv");
-      top.appendChild(lv);
-      var t = A.el("span", "room-title");
-      b.appendChild(top); b.appendChild(t);
-      b.addEventListener("click", function () { openDetail(r.id); });
-      hall.appendChild(b);
-      tiles[r.id] = { btn: b, lv: lv, title: t };
+      b.setAttribute("aria-pressed", g === gradeSel ? "true" : "false");
+      b.addEventListener("click", function () {
+        gradeSel = g;
+        gradeBtns.forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+        render();
+      });
+      gradeBtns.push(b);
+      $("grades").appendChild(b);
     });
-    sec.appendChild(h); sec.appendChild(hall);
-    $("mapView").appendChild(sec);
-  });
-  A.rooms.forEach(function (r) {
-    var b = A.el("button", "row");
-    b.type = "button";
-    var pill = A.el("span", "pill");
-    var main = A.el("span", "row-main");
-    main.appendChild(A.el("b", null, r.name));
-    var t = A.el("span");
-    main.appendChild(t);
-    var meta = A.el("span", "row-meta");
-    b.appendChild(pill); b.appendChild(main); b.appendChild(meta);
-    b.addEventListener("click", function () { openDetail(r.id); });
-    rows[r.id] = { btn: b, pill: pill, title: t, meta: meta };
-  });
+    $("grades").hidden = gl.length < 2;
+
+    // 층별 지도
+    tiles = {}; rows = {};
+    $("mapView").innerHTML = "";
+    A.floors(list).forEach(function (f) {
+      var sec = A.el("section", "floor");
+      var h = A.el("h2", "floor-no");
+      h.appendChild(A.el("b", null, String(f)));
+      h.appendChild(document.createTextNode("층"));
+      var hall = A.el("div", "hall");
+      list.filter(function (r) { return r.floor === f; }).forEach(function (r) {
+        var b = A.el("button", "room");
+        b.type = "button";
+        var top = A.el("span", "room-top");
+        top.appendChild(A.el("span", "room-no", r.id));
+        var lv = A.el("span", "room-lv");
+        top.appendChild(lv);
+        var t = A.el("span", "room-title");
+        b.appendChild(top); b.appendChild(t);
+        b.addEventListener("click", function () { openDetail(r.id); });
+        hall.appendChild(b);
+        tiles[r.id] = { btn: b, lv: lv, title: t };
+      });
+      sec.appendChild(h); sec.appendChild(hall);
+      $("mapView").appendChild(sec);
+    });
+
+    // 목록 (칸은 만들어 두고, 순서는 render()가 정해요)
+    $("listView").innerHTML = "";
+    list.forEach(function (r) {
+      var b = A.el("button", "row");
+      b.type = "button";
+      var pill = A.el("span", "pill");
+      var main = A.el("span", "row-main");
+      main.appendChild(A.el("b", null, r.name));
+      var t = A.el("span");
+      main.appendChild(t);
+      var meta = A.el("span", "row-meta");
+      b.appendChild(pill); b.appendChild(main); b.appendChild(meta);
+      b.addEventListener("click", function () { openDetail(r.id); });
+      rows[r.id] = { btn: b, pill: pill, title: t, meta: meta };
+    });
+    builtSig = sigOf(list);
+  }
 
   // ---------- 화면 그리기 ----------
   function stateText(e, now) {
@@ -241,7 +261,14 @@
 
   function render() {
     var now = Date.now();
-    var items = A.mergeAll(infoMap).map(function (r) { return { r: r, e: A.effective(statusMap[r.id], now) }; });
+    // 교실 목록(추가·삭제 반영)을 한 번 받은 뒤에 그려요. 지운 교실이 잠깐 보이는 걸 막기 위해서예요.
+    var list = gotInfo ? A.mergeAll(infoMap) : [];
+    if (sigOf(list) !== builtSig) build(list);
+    var em = $("emptyMsg");
+    em.hidden = list.length > 0;
+    em.textContent = gotInfo ? "아직 등록된 교실이 없어요." : "교실 목록을 불러오는 중이에요.";
+    curList = list;
+    var items = list.map(function (r) { return { r: r, e: A.effective(statusMap[r.id], now) }; });
     var shown = function (it) { return !gradeSel || it.r.grade === gradeSel; };
 
     // 지도
@@ -276,6 +303,8 @@
       .slice(0, 4);
     if (!gotStatus) {
       q.appendChild(A.el("p", "quiet-empty", "교실 상황을 불러오는 중이에요."));
+    } else if (!list.length) {
+      // 등록된 교실이 없을 땐 위쪽 안내만 보여줘요
     } else if (!quiet.length) {
       q.appendChild(A.el("p", "quiet-empty", "지금은 여유 있는 교실이 없어요. 조금 뒤에 다시 봐 주세요."));
     } else {
@@ -303,7 +332,9 @@
   var dlg = $("detail");
   function fillDetail(id) {
     var now = Date.now();
-    var r = A.mergeRoom(A.room(id), infoMap[id]);
+    var r = null;
+    curList.forEach(function (x) { if (x.id === id) r = x; });
+    if (!r) { closeDetail(); return; }   // 보는 중에 담당자가 교실을 지운 경우
     var e = A.effective(statusMap[id], now);
     $("dBand").dataset.l = A.levelKey(e.level);
     $("dLevel").textContent = A.levelLabel(e.level);
@@ -327,6 +358,8 @@
 
   render();
   setInterval(render, 30000);
+  // 교실 정보가 8초 안에 안 오면 config.js 기본 목록으로라도 보여줘요
+  setTimeout(function () { if (!gotInfo) { gotInfo = true; render(); } }, 8000);
 
   // ---------- 데이터 연결 ----------
   if (A.demo) $("demoBanner").hidden = false;
@@ -337,7 +370,8 @@
       if (unsubs.length) return;
       unsubs.push(store.onStatus(function (m) { statusMap = m; gotStatus = true; connErr = false; render(); },
         function () { connErr = true; render(); }));
-      unsubs.push(store.onRooms(function (m) { infoMap = m; render(); }, function () {}));
+      unsubs.push(store.onRooms(function (m) { infoMap = m; gotInfo = true; render(); },
+        function () { gotInfo = true; render(); }));
     }
     function unsubscribe() { unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = []; }
     subscribe();
@@ -355,6 +389,7 @@
     });
   }).catch(function () {
     connErr = true;
+    gotInfo = true;
     render();
   });
 })();
