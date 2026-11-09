@@ -32,6 +32,12 @@ window.APP_CONFIG = {
   },
 
   // ---------------------------------------------------------------
+  // 학년별 층 (1층은 교무실이라 교실이 없어요). 담당자 화면에서 반을 추가할 때
+  // 학년을 넣으면 이 층이 자동으로 채워져요. 지도·전자칠판에는 교실이 있는 층만 나와요.
+  // ---------------------------------------------------------------
+  gradeFloors: { 1: 2, 2: 3, 3: 4 },
+
+  // ---------------------------------------------------------------
   // 교실 목록  ※ 지금은 예시예요. 실제 반과 프로그램으로 바꿔 주세요.
   //   담당자 화면(admin.html)에서도 반을 추가·삭제할 수 있어요. 거기서 한 일은 이 목록 위에
   //   겹쳐서 적용돼요. (삭제한 반은 숨겨질 뿐이라 담당자 화면에서 되살릴 수 있어요.)
@@ -46,20 +52,20 @@ window.APP_CONFIG = {
   //   목록 순서 = 지도에서 복도를 따라 놓이는 순서예요.
   // ---------------------------------------------------------------
   rooms: [
-    { id: "1-1", name: "1학년 1반", grade: 1, floor: 3, title: "잠긴 과학실 방탈출", desc: "4명씩 입장해서 15분 안에 단서를 풀고 탈출해요.", hours: "10:00–15:00", normalAt: 6, busyAt: 12 },
-    { id: "1-2", name: "1학년 2반", grade: 1, floor: 3, title: "귀신의 집", desc: "불 꺼진 교실을 한 바퀴 도는 코스예요. 2~3명씩 들어가요.", hours: "10:00–15:00", normalAt: 6, busyAt: 12 },
-    { id: "1-3", name: "1학년 3반", grade: 1, floor: 3, title: "추억의 오락실", desc: "레트로 게임과 보드게임을 자유롭게 즐길 수 있어요.", hours: "10:00–15:00", normalAt: 10, busyAt: 20 },
-    { id: "1-4", name: "1학년 4반", grade: 1, floor: 3, title: "인생네컷 포토부스", desc: "소품을 골라 네 컷 사진을 찍고 바로 뽑아 가요.", hours: "10:00–15:00", normalAt: 8, busyAt: 16 },
+    { id: "1-1", name: "1학년 1반", grade: 1, floor: 2, title: "잠긴 과학실 방탈출", desc: "4명씩 입장해서 15분 안에 단서를 풀고 탈출해요.", hours: "10:00–15:00", normalAt: 6, busyAt: 12 },
+    { id: "1-2", name: "1학년 2반", grade: 1, floor: 2, title: "귀신의 집", desc: "불 꺼진 교실을 한 바퀴 도는 코스예요. 2~3명씩 들어가요.", hours: "10:00–15:00", normalAt: 6, busyAt: 12 },
+    { id: "1-3", name: "1학년 3반", grade: 1, floor: 2, title: "추억의 오락실", desc: "레트로 게임과 보드게임을 자유롭게 즐길 수 있어요.", hours: "10:00–15:00", normalAt: 10, busyAt: 20 },
+    { id: "1-4", name: "1학년 4반", grade: 1, floor: 2, title: "인생네컷 포토부스", desc: "소품을 골라 네 컷 사진을 찍고 바로 뽑아 가요.", hours: "10:00–15:00", normalAt: 8, busyAt: 16 },
 
-    { id: "2-1", name: "2학년 1반", grade: 2, floor: 2, title: "카페 쉼표", desc: "에이드와 쿠키를 팔아요. 앉아서 쉬어 갈 수 있어요.", hours: "10:00–14:30", normalAt: 12, busyAt: 24 },
-    { id: "2-2", name: "2학년 2반", grade: 2, floor: 2, title: "분식 포차", desc: "떡볶이, 어묵, 주먹밥을 팔아요.", hours: "11:00–14:00", normalAt: 12, busyAt: 24 },
-    { id: "2-3", name: "2학년 3반", grade: 2, floor: 2, title: "보드게임 카페", desc: "할리갈리, 젠가, 루미큐브 등 20종이 준비돼 있어요.", hours: "10:00–15:00", normalAt: 10, busyAt: 20 },
-    { id: "2-4", name: "2학년 4반", grade: 2, floor: 2, title: "타로 상담소", desc: "고민 하나를 골라 타로 카드로 봐 드려요.", hours: "10:00–15:00", normalAt: 5, busyAt: 10 },
-    { id: "2-5", name: "2학년 5반", grade: 2, floor: 2, title: "미니 운동회", desc: "실내 농구 슛, 컵 쌓기 기록 도전이 있어요.", hours: "10:00–15:00", normalAt: 10, busyAt: 20 },
+    { id: "2-1", name: "2학년 1반", grade: 2, floor: 3, title: "카페 쉼표", desc: "에이드와 쿠키를 팔아요. 앉아서 쉬어 갈 수 있어요.", hours: "10:00–14:30", normalAt: 12, busyAt: 24 },
+    { id: "2-2", name: "2학년 2반", grade: 2, floor: 3, title: "분식 포차", desc: "떡볶이, 어묵, 주먹밥을 팔아요.", hours: "11:00–14:00", normalAt: 12, busyAt: 24 },
+    { id: "2-3", name: "2학년 3반", grade: 2, floor: 3, title: "보드게임 카페", desc: "할리갈리, 젠가, 루미큐브 등 20종이 준비돼 있어요.", hours: "10:00–15:00", normalAt: 10, busyAt: 20 },
+    { id: "2-4", name: "2학년 4반", grade: 2, floor: 3, title: "타로 상담소", desc: "고민 하나를 골라 타로 카드로 봐 드려요.", hours: "10:00–15:00", normalAt: 5, busyAt: 10 },
+    { id: "2-5", name: "2학년 5반", grade: 2, floor: 3, title: "미니 운동회", desc: "실내 농구 슛, 컵 쌓기 기록 도전이 있어요.", hours: "10:00–15:00", normalAt: 10, busyAt: 20 },
 
-    { id: "3-1", name: "3학년 1반", grade: 3, floor: 1, title: "플리마켓", desc: "학생들이 가져온 책, 문구, 옷을 싸게 팔아요.", hours: "10:00–13:00", normalAt: 12, busyAt: 24 },
-    { id: "3-2", name: "3학년 2반", grade: 3, floor: 1, title: "다트·사격 게임", desc: "점수에 따라 간식을 받아 가요.", hours: "10:00–15:00", normalAt: 8, busyAt: 16 },
-    { id: "3-3", name: "3학년 3반", grade: 3, floor: 1, title: "코인 노래방", desc: "한 곡씩 돌아가며 불러요. 대기 명단을 적고 기다려 주세요.", hours: "10:00–15:00", normalAt: 8, busyAt: 16 },
-    { id: "3-4", name: "3학년 4반", grade: 3, floor: 1, title: "골든벨 퀴즈쇼", desc: "매시 정각에 시작해요. 우승하면 상품이 있어요.", hours: "매시 정각", normalAt: 15, busyAt: 28 }
+    { id: "3-1", name: "3학년 1반", grade: 3, floor: 4, title: "플리마켓", desc: "학생들이 가져온 책, 문구, 옷을 싸게 팔아요.", hours: "10:00–13:00", normalAt: 12, busyAt: 24 },
+    { id: "3-2", name: "3학년 2반", grade: 3, floor: 4, title: "다트·사격 게임", desc: "점수에 따라 간식을 받아 가요.", hours: "10:00–15:00", normalAt: 8, busyAt: 16 },
+    { id: "3-3", name: "3학년 3반", grade: 3, floor: 4, title: "코인 노래방", desc: "한 곡씩 돌아가며 불러요. 대기 명단을 적고 기다려 주세요.", hours: "10:00–15:00", normalAt: 8, busyAt: 16 },
+    { id: "3-4", name: "3학년 4반", grade: 3, floor: 4, title: "골든벨 퀴즈쇼", desc: "매시 정각에 시작해요. 우승하면 상품이 있어요.", hours: "매시 정각", normalAt: 15, busyAt: 28 }
   ]
 };

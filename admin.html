@@ -555,12 +555,23 @@
       ? "교실 번호는 ‘" + A.makeId(g, c) + "’, 이름은 ‘" + g + "학년 " + c + "반’이 돼요. 태블릿 주소도 이 번호로 만들어져요."
       : "학년과 반 번호를 넣으면 교실 번호가 정해져요.";
   }
-  $("fGrade").addEventListener("input", updateHint);
+  // 반을 추가할 때 학년을 넣으면 config.js의 gradeFloors에 적은 층을 자동으로 채워줘요.
+  // 담당자가 층을 직접 고친 뒤에는 건드리지 않아요.
+  var floorTouched = false;
+  $("fFloor").addEventListener("input", function () { floorTouched = true; });
+  $("fGrade").addEventListener("input", function () {
+    updateHint();
+    if (formMode !== "add" || floorTouched) return;
+    var gf = A.config.gradeFloors || {};
+    var f = gf[parseInt($("fGrade").value, 10)];
+    $("fFloor").value = f != null ? f : "";
+  });
   $("fClass").addEventListener("input", updateHint);
 
   function openForm(mode, r) {
     var add = mode === "add";
     formMode = mode;
+    floorTouched = false;
     editId = r ? r.id : null;
     $("editTitle").textContent = add ? "반 추가" : "프로그램 정보 수정";
     $("editRoom").textContent = add ? "새 반 만들기" : r.name + " · " + r.floor + "층";
