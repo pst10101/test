@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>혼잡도 장비 점검</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 위에 요약 막대, 아래는 카메라 패널 + 점검 목록 2단(좁으면 1단) */
+:root {
+  --bg: #f2f4f1;
+  --surface: #ffffff;
+  --fg: #19221e;
+  --muted: #5a6862;
+  --line: #d8dfda;
+  --accent: #1f5a48;
+  --on-accent: #ffffff;
+  --stage: #0f1412;
+  --box: #ffd23f;
+  --ok: #1d7543;   --ok-bg: #e2f2e7;
+  --warn: #946000; --warn-bg: #fcf0d6;
+  --bad: #b3261e;  --bad-bg: #fce7e5;
+  --idle: #66716b; --idle-bg: #eaedeb;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111714; --surface: #19211d; --fg: #e4ebe7; --muted: #98a69f; --line: #2a3530;
+    --accent: #84c9ad; --on-accent: #0d1a14; --stage: #050807;
+    --ok: #74d49f; --ok-bg: #16301f;
+    --warn: #f0c065; --warn-bg: #33290f;
+    --bad: #ff8b7d; --bad-bg: #3a1a17;
+    --idle: #9aa49f; --idle-bg: #222a26;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111714; --surface: #19211d; --fg: #e4ebe7; --muted: #98a69f; --line: #2a3530;
+  --accent: #84c9ad; --on-accent: #0d1a14; --stage: #050807;
+  --ok: #74d49f; --ok-bg: #16301f;
+  --warn: #f0c065; --warn-bg: #33290f;
+  --bad: #ff8b7d; --bad-bg: #3a1a17;
+  --idle: #9aa49f; --idle-bg: #222a26;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 20px;
+}
+
+header { display: grid; gap: 6px; }
+.eyebrow { font-size: 12.5px; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+h1 { margin: 0; font-size: clamp(24px, 4vw, 32px); font-weight: 700; letter-spacing: -.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+
+/* 요약 막대 */
+.summary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px;
+}
+.score { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.score b { font-size: 34px; font-weight: 600; line-height: 1; }
+.score span { color: var(--muted); font-size: 15px; }
+.verdict { flex: 1 1 240px; min-width: 0; font-weight: 600; }
+.verdict small { display: block; font-weight: 400; color: var(--muted); font-size: 13.5px; }
+.tallies { display: flex; gap: 6px; flex-wrap: wrap; }
+
+button {
+  font: inherit; font-weight: 600; font-size: 14.5px;
+  border-radius: 10px; padding: 10px 16px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  min-height: 44px;
+}
+button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  gap: 20px;
+  align-items: start;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+.panel-head { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.panel-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.panel-head p { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* 카메라 */
+.stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  max-width: 100%;
+  background: var(--stage);
+  display: grid; place-items: center;
+}
+.stage video, .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.stage .placeholder { position: relative; z-index: 1; display: grid; gap: 12px; justify-items: center; text-align: center; padding: 20px; color: #c9d3ce; }
+.stage .placeholder p { margin: 0; max-width: 32ch; font-size: 14px; }
+
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.stat { padding: 14px 18px; display: grid; gap: 2px; min-width: 0; }
+.stat + .stat { border-left: 1px solid var(--line); }
+.stat .label { font-size: 12.5px; color: var(--muted); letter-spacing: .03em; }
+.stat .value { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 24px; font-weight: 600; line-height: 1.2; }
+.stat .value small { font-size: 13px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.stat.big .value { font-size: 40px; }
+
+.controls { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+.slider { display: flex; align-items: center; gap: 10px; flex: 1 1 220px; min-width: 0; }
+.slider label { font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+.slider input { flex: 1; min-width: 0; accent-color: var(--accent); }
+.slider output { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; min-width: 4ch; text-align: right; }
+.note { padding: 0 18px 16px; margin: 0; font-size: 13px; color: var(--muted); }
+
+/* 점검 목록 */
+.checks { list-style: none; margin: 0; padding: 0; }
+.check { padding: 13px 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; }
+.check + .check { border-top: 1px solid var(--line); }
+.check .name { font-weight: 600; }
+.check .host { font-family: var(--font-num); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.check .msg { grid-column: 1 / -1; font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+.check[data-s="bad"] .msg { color: var(--bad); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 600; letter-spacing: .02em;
+  padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  background: var(--idle-bg); color: var(--idle);
+}
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill[data-s="ok"] { background: var(--ok-bg); color: var(--ok); }
+.pill[data-s="warn"] { background: var(--warn-bg); color: var(--warn); }
+.pill[data-s="bad"] { background: var(--bad-bg); color: var(--bad); }
+.pill[data-s="run"]::before { animation: blink 1s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .pill[data-s="run"]::before { animation: none; } }
+
+.copy-msg { font-size: 13px; color: var(--muted); }
+
+@media (max-width: 520px) {
+  .stat { padding: 12px; }
+  .stat .value { font-size: 20px; }
+  .stat.big .value { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">교실 혼잡도 프로젝트 · 태블릿 1대 시험용</div>
+    <h1>혼잡도 장비 점검</h1>
+    <p class="lede">이 태블릿에서 카메라 인원 세기가 돌아가는지, 학교 와이파이나 관리 프로그램에 막히는 곳이 없는지 확인해요. 페이지를 열면 자동으로 점검하고, 카메라는 아래 버튼을 눌러야 켜져요.</p>
+  </header>
+
+  <section class="summary" aria-live="polite">
+    <div class="score"><b id="scoreOk">0</b><span id="scoreTotal">/ 9 통과</span></div>
+    <div class="verdict" id="verdict">점검 중이에요<small>잠시만 기다려 주세요.</small></div>
+    <div class="tallies" id="tallies"></div>
+    <button type="button" id="copyBtn">결과 복사</button>
+    <span class="copy-msg" id="copyMsg" role="status"></span>
+  </section>
+
+  <div class="grid">
+
+    <section class="panel" aria-labelledby="camTitle">
+      <div class="panel-head">
+        <h2 id="camTitle">카메라 인원 세기</h2>
+        <p id="camLabel">카메라 꺼짐</p>
+      </div>
+      <div class="stage">
+        <video id="video" playsinline muted hidden></video>
+        <canvas id="overlay" hidden></canvas>
+        <div class="placeholder" id="placeholder">
+          <p>버튼을 누르면 카메라 권한을 물어봐요. 허용을 눌러 주세요.</p>
+          <button type="button" class="primary" id="startBtn">카메라 켜고 점검 시작</button>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat big"><span class="label">지금 인식된 사람</span><span class="value"><span id="count">–</span><small>명</small></span></div>
+        <div class="stat"><span class="label">인식 시간 (평균)</span><span class="value"><span id="ms">–</span><small>ms</small></span></div>
+        <div class="stat"><span class="label">최대 인원</span><span class="value"><span id="maxCount">–</span><small>명</small></span></div>
+      </div>
+      <div class="controls">
+        <button type="button" id="switchBtn" disabled>전면 카메라로 바꾸기</button>
+        <div class="slider">
+          <label for="threshold">인식 기준</label>
+          <input type="range" id="threshold" min="20" max="90" step="5" value="50">
+          <output id="thresholdOut" for="threshold">50%</output>
+        </div>
+      </div>
+      <p class="note">노란 박스가 사람으로 인식된 부분이에요. 시험 중에는 0.3초마다 세지만, 실제로 설치할 때는 5~10초에 한 번만 세서 배터리와 발열을 줄여요.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="checkTitle">
+      <div class="panel-head">
+        <h2 id="checkTitle">점검 항목</h2>
+        <p>빨간 항목은 정보 선생님께 보여주세요</p>
+      </div>
+      <ul class="checks" id="checks"></ul>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- 점검 항목 정의 ----------
+  const CHECKS = [
+    { id: "https",   name: "보안 주소 (HTTPS)",  host: "이 페이지 주소" },
+    { id: "lib",     name: "AI 라이브러리",       host: "cdn.jsdelivr.net" },
+    { id: "model",   name: "AI 모델 파일",        host: "모델 서버" },
+    { id: "gpu",     name: "그래픽 가속 (WebGL)", host: "태블릿 성능" },
+    { id: "fbcode",  name: "Firebase 코드",       host: "www.gstatic.com" },
+    { id: "fbdb",    name: "혼잡도 데이터 서버",  host: "firestore.googleapis.com" },
+    { id: "camera",  name: "카메라",              host: "브라우저 권한 · 관리 정책" },
+    { id: "wake",    name: "화면 꺼짐 방지",      host: "Wake Lock" },
+    { id: "battery", name: "배터리 정보",         host: "Battery API" },
+  ];
+  const LABEL = { run: "확인 중", idle: "대기", ok: "통과", warn: "주의", bad: "차단" };
+  const state = {};
+  const listEl = document.getElementById("checks");
+
+  for (const c of CHECKS) {
+    const li = document.createElement("li");
+    li.className = "check";
+    li.id = "row-" + c.id;
+    li.innerHTML = '<div><div class="name"></div><div class="host"></div></div><span class="pill"></span><div class="msg"></div>';
+    li.querySelector(".name").textContent = c.name;
+    li.querySelector(".host").textContent = c.host;
+    listEl.appendChild(li);
+    state[c.id] = { s: "idle", msg: "", host: c.host };
+  }
+
+  function set(id, s, msg, host) {
+    const st = state[id];
+    st.s = s; st.msg = msg || "";
+    if (host) st.host = host;
+    const row = document.getElementById("row-" + id);
+    row.dataset.s = s;
+    const pill = row.querySelector(".pill");
+    pill.dataset.s = s;
+    pill.textContent = LABEL[s];
+    row.querySelector(".msg").textContent = st.msg;
+    row.querySelector(".host").textContent = st.host;
+    renderSummary();
+  }
+
+  const CRITICAL = ["https", "lib", "model", "camera", "fbdb", "fbcode"];
+  function renderSummary() {
+    const vals = Object.values(state);
+    const n = s => vals.filter(v => v.s === s).length;
+    document.getElementById("scoreOk").textContent = n("ok");
+    document.getElementById("scoreTotal").textContent = "/ " + vals.length + " 통과";
+    const t = document.getElementById("tallies");
+    t.innerHTML = "";
+    for (const s of ["bad", "warn", "run", "idle"]) {
+      if (!n(s)) continue;
+      const p = document.createElement("span");
+      p.className = "pill"; p.dataset.s = s;
+      p.textContent = LABEL[s] + " " + n(s);
+      t.appendChild(p);
+    }
+    const v = document.getElementById("verdict");
+    const badCritical = CRITICAL.filter(id => state[id].s === "bad");
+    let head, sub;
+    if (badCritical.length) {
+      head = "막힌 항목이 있어요";
+      sub = badCritical.map(id => CHECKS.find(c => c.id === id).name).join(", ") + " 항목을 확인해야 해요.";
+    } else if (n("run")) {
+      head = "점검 중이에요"; sub = "인터넷이 느리면 모델 파일 받는 데 시간이 걸려요.";
+    } else if (state.camera.s === "idle") {
+      head = "카메라만 남았어요"; sub = "‘카메라 켜고 점검 시작’ 버튼을 눌러 주세요.";
+    } else if (n("warn") || n("bad")) {
+      head = "돌릴 수는 있어요"; sub = "주의 항목은 설정으로 해결할 수 있어요.";
+    } else {
+      head = "이 태블릿에서 돌릴 수 있어요"; sub = "모든 항목이 통과했어요.";
+    }
+    v.textContent = head;
+    const small = document.createElement("small");
+    small.textContent = sub;
+    v.appendChild(small);
+  }
+
+  // ---------- 유틸 ----------
+  const withTimeout = (p, ms, label) => Promise.race([
+    p, new Promise((_, rej) => setTimeout(() => rej(new Error(label || "시간 초과")), ms))
+  ]);
+  const hostOf = u => { try { return new URL(u).host; } catch (e) { return u; } };
+
+  function loadScript(src, ms) {
+    return withTimeout(new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.async = true; s.crossOrigin = "anonymous";
+      s.onload = () => res(src);
+      s.onerror = () => { s.remove(); rej(new Error("불러오기 실패")); };
+      document.head.appendChild(s);
+    }), ms || 20000, "응답 없음");
+  }
+  async function loadFirst(urls, check) {
+    const failed = [];
+    for (const u of urls) {
+      try { await loadScript(u); return { url: u, failed }; }
+      catch (e) { failed.push(hostOf(u)); }
+    }
+    throw Object.assign(new Error("all failed"), { failed });
+  }
+
+  // 연결 확인: CORS로 내용까지 확인 → 안 되면 연결만 확인 → 둘 다 안 되면 차단
+  async function probe(url, verify) {
+    try {
+      const r = await withTimeout(fetch(url, { cache: "no-store" }), 10000);
+      const text = await r.text();
+      if (verify(r, text)) return "real";
+      return "odd";
+    } catch (e) { /* CORS 거부 또는 차단 → 아래에서 한 번 더 */ }
+    try {
+      await withTimeout(fetch(url, { mode: "no-cors", cache: "no-store" }), 10000);
+      return "reach";
+    } catch (e) { return "blocked"; }
+  }
+
+  // ---------- 1. HTTPS ----------
+  if (window.isSecureContext) set("https", "ok", "안전한 주소라 카메라를 쓸 수 있어요.", location.host || "로컬 파일");
+  else set("https", "bad", "https:// 주소가 아니라서 카메라가 막혀요. GitHub Pages 같은 https 주소로 열어 주세요.", location.host || "로컬 파일");
+
+  // ---------- 2. WebGL (라이브러리와 별개로 미리 확인) ----------
+  let webglOk = false;
+  try {
+    const cv = document.createElement("canvas");
+    webglOk = !!(cv.getContext("webgl2") || cv.getContext("webgl"));
+  } catch (e) {}
+  set("gpu", "run", "AI 라이브러리를 불러온 뒤 확인해요.");
+
+  // ---------- 3. 배터리 ----------
+  (async () => {
+    if (!navigator.getBattery) { set("battery", "warn", "이 브라우저는 배터리 정보를 알려주지 않아요. 관리 화면에 배터리 경고를 띄울 수 없어요."); return; }
+    try {
+      const b = await navigator.getBattery();
+      const show = () => set("battery", "ok",
+        "배터리 " + Math.round(b.level * 100) + "% · " + (b.charging ? "충전 중" : "충전기 안 꽂힘"));
+      show();
+      b.addEventListener("levelchange", show);
+      b.addEventListener("chargingchange", show);
+    } catch (e) { set("battery", "warn", "배터리 정보를 읽지 못했어요."); }
+  })();
+
+  // ---------- 4. Firebase 연결 ----------
+  (async () => {
+    set("fbcode", "run", "");
+    const r = await probe("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js",
+      (res, t) => res.ok && t.indexOf("firebase") !== -1);
+    if (r === "real") set("fbcode", "ok", "Firebase 코드를 받을 수 있어요.");
+    else if (r === "reach" || r === "odd") set("fbcode", "warn", "서버에 연결은 되지만 내용까지는 확인하지 못했어요. 학교 필터가 중간에서 바꿨을 수 있어요.");
+    else set("fbcode", "bad", "www.gstatic.com에 연결할 수 없어요. 학교 필터에서 이 주소를 허용해야 해요.");
+  })();
+  (async () => {
+    set("fbdb", "run", "");
+    const r = await probe("https://firestore.googleapis.com/v1/projects/cdt-probe-0000/databases/(default)/documents/probe/ping",
+      (res, t) => /"error"/.test(t));
+    if (r === "real") set("fbdb", "ok", "데이터 서버와 주고받을 수 있어요.");
+    else if (r === "reach" || r === "odd") set("fbdb", "warn", "서버에 연결은 되지만 응답 내용은 확인하지 못했어요. 실제 Firebase를 연결해 보면 확실해져요.");
+    else set("fbdb", "bad", "firestore.googleapis.com에 연결할 수 없어요. 혼잡도 숫자를 보낼 수 없어요.");
+  })();
+
+  // ---------- 5. AI 라이브러리 + 모델 ----------
+  let model = null;
+  (async () => {
+    set("lib", "run", "");
+    set("model", "idle", "라이브러리를 먼저 불러와요.");
+    const TF = [
+      "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js",
+      "https://unpkg.com/@tensorflow/tfjs@4.22.0/dist/tf.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.22.0/tf.min.js",
+    ];
+    const COCO = [
+      "https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js",
+      "https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js",
+    ];
+    let a, b;
+    try {
+      a = await loadFirst(TF);
+      b = await loadFirst(COCO);
+    } catch (e) {
+      const tried = (e.failed || []).join(", ");
+      set("lib", "bad", "AI 라이브러리를 받을 수 없어요. 막힌 곳: " + tried + ". 학교 필터에서 이 주소를 허용해야 해요.");
+      set("model", "bad", "라이브러리가 없어서 모델을 받을 수 없어요.");
+      set("gpu", webglOk ? "warn" : "bad", webglOk ? "WebGL은 켜져 있지만 라이브러리가 없어 시험하지 못했어요." : "WebGL을 쓸 수 없어요. 인식이 많이 느릴 거예요.");
+      return;
+    }
+    const failedAll = a.failed.concat(b.failed);
+    const used = hostOf(a.url);
+    if (failedAll.length) set("lib", "warn", failedAll.join(", ") + " 는 막혀 있어서 " + used + " 로 우회해서 불러왔어요.", used);
+    else set("lib", "ok", "AI 라이브러리를 불러왔어요.", used);
+
+    // 그래픽 가속
+    try {
+      await tf.setBackend("webgl");
+      await tf.ready();
+    } catch (e) {}
+    const backend = tf.getBackend();
+    if (backend === "webgl") set("gpu", "ok", "그래픽 가속으로 AI를 돌려요.");
+    else set("gpu", "warn", "그래픽 가속 없이 " + backend + " 방식으로 돌려요. 인식 시간이 길게 나올 수 있어요.");
+
+    // 모델: 실제로 어떤 서버에서 받는지 기록
+    set("model", "run", "모델 파일을 받는 중이에요 (몇 MB).");
+    const hosts = new Set();
+    const origFetch = window.fetch;
+    window.fetch = function (input, init) {
+      try { hosts.add(new URL(typeof input === "string" ? input : input.url, location.href).host); } catch (e) {}
+      return origFetch.apply(this, arguments);
+    };
+    try {
+      model = await withTimeout(cocoSsd.load({ base: "lite_mobilenet_v2" }), 60000, "1분 넘게 응답 없음");
+      set("model", "ok", "모델을 받았어요. 카메라를 켜면 바로 인식해요.", [...hosts].join(", ") || "모델 서버");
+    } catch (e) {
+      set("model", "bad", "모델 파일을 받을 수 없어요 (" + e.message + "). 학교 필터에서 이 주소를 허용해야 해요.", [...hosts].join(", ") || "모델 서버");
+    } finally {
+      window.fetch = origFetch;
+    }
+  })();
+
+  // ---------- 6. 카메라 + 인식 ----------
+  const video = document.getElementById("video");
+  const canvas = document.getElementById("overlay");
+  const ctx = canvas.getContext("2d");
+  const startBtn = document.getElementById("startBtn");
+  const switchBtn = document.getElementById("switchBtn");
+  const camLabel = document.getElementById("camLabel");
+  const th = document.getElementById("threshold");
+  const thOut = document.getElementById("thresholdOut");
+  const boxColor = getComputedStyle(document.documentElement).getPropertyValue("--box").trim() || "#ffd23f";
+
+  let stream = null, facing = "environment", running = false;
+  const times = []; let maxCount = 0; let lastCount = 0;
+
+  th.addEventListener("input", () => { thOut.textContent = th.value + "%"; });
+
+  async function startCamera() {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      set("camera", "bad", "이 주소나 브라우저에서는 카메라를 쓸 수 없어요. https 주소의 크롬에서 열어 주세요.");
+      return false;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facing }, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+    } catch (e) {
+      const why = {
+        NotAllowedError: "카메라 권한이 거부됐어요. 허용을 눌렀는데도 이렇게 나오면 학교 관리 프로그램이 카메라를 막고 있는 거예요.",
+        SecurityError: "보안 정책으로 카메라가 막혀 있어요. 학교 관리 프로그램 설정을 확인해야 해요.",
+        NotFoundError: "카메라를 찾을 수 없어요.",
+        NotReadableError: "다른 앱이 카메라를 쓰고 있어요. 카메라 앱을 닫고 다시 해 보세요.",
+        OverconstrainedError: "요청한 카메라를 찾지 못했어요.",
+      }[e.name] || ("카메라를 켜지 못했어요 (" + e.name + ").");
+      set("camera", "bad", why);
+      return false;
+    }
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+    video.hidden = false; canvas.hidden = false;
+    document.getElementById("placeholder").hidden = true;
+    const s = stream.getVideoTracks()[0].getSettings();
+    const which = facing === "environment" ? "후면" : "전면";
+    camLabel.textContent = which + " 카메라 · " + (s.width || video.videoWidth) + "×" + (s.height || video.videoHeight);
+    switchBtn.textContent = facing === "environment" ? "전면 카메라로 바꾸기" : "후면 카메라로 바꾸기";
+    switchBtn.disabled = false;
+    set("camera", "ok", which + " 카메라가 켜졌어요.");
+    return true;
+  }
+
+  let wakeLock = null;
+  async function requestWake() {
+    if (!("wakeLock" in navigator)) { set("wake", "warn", "이 브라우저는 화면 꺼짐 방지를 지원하지 않아요. 태블릿 설정에서 화면 자동 꺼짐 시간을 최대로 해 두세요."); return; }
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      set("wake", "ok", "이 페이지가 열려 있는 동안 화면이 꺼지지 않아요.");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } catch (e) {
+      set("wake", "warn", "화면 꺼짐 방지가 거부됐어요 (" + e.name + "). 태블릿 설정에서 화면 자동 꺼짐 시간을 최대로 해 두세요.");
+    }
+  }
+
+  function draw(people) {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    ctx.clearRect(0, 0, w, h);
+    const lw = Math.max(2, Math.round(w / 220));
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = boxColor;
+    ctx.font = "600 " + Math.max(13, Math.round(w / 40)) + "px system-ui, sans-serif";
+    ctx.textBaseline = "top";
+    for (const p of people) {
+      const [x, y, bw, bh] = p.bbox;
+      ctx.strokeRect(x, y, bw, bh);
+      const label = "사람 " + Math.round(p.score * 100) + "%";
+      const tw = ctx.measureText(label).width + 10;
+      const th2 = Math.max(18, Math.round(w / 32));
+      ctx.fillStyle = boxColor;
+      ctx.fillRect(x - lw / 2, Math.max(0, y - th2), tw, th2);
+      ctx.fillStyle = "#111";
+      ctx.fillText(label, x + 4, Math.max(0, y - th2) + 3);
+    }
+  }
+
+  async function loop() {
+    if (!running) return;
+    if (document.hidden || !model || video.readyState < 2) { setTimeout(loop, 500); return; }
+    const t0 = performance.now();
+    let preds = [];
+    try { preds = await model.detect(video, 30, Number(th.value) / 100); } catch (e) {}
+    const dt = performance.now() - t0;
+    times.push(dt); if (times.length > 20) times.shift();
+    const people = preds.filter(p => p.class === "person");
+    lastCount = people.length;
+    maxCount = Math.max(maxCount, lastCount);
+    document.getElementById("count").textContent = lastCount;
+    document.getElementById("maxCount").textContent = maxCount;
+    document.getElementById("ms").textContent = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+    draw(people);
+    setTimeout(loop, 300);
+  }
+
+  startBtn.addEventListener("click", async () => {
+    startBtn.disabled = true;
+    set("camera", "run", "권한 창이 뜨면 허용을 눌러 주세요.");
+    const ok = await startCamera();
+    startBtn.disabled = false;
+    if (!ok) return;
+    requestWake();
+    if (!running) { running = true; loop(); }
+    if (!model && state.model.s !== "bad") camLabel.textContent += " · 모델 기다리는 중";
+  });
+
+  switchBtn.addEventListener("click", async () => {
+    switchBtn.disabled = true;
+    facing = facing === "environment" ? "user" : "environment";
+    await startCamera();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && running && !wakeLock && state.wake.s === "ok") requestWake();
+  });
+
+  // ---------- 결과 복사 ----------
+  document.getElementById("copyBtn").addEventListener("click", async () => {
+    const lines = [];
+    const now = new Date();
+    lines.push("[혼잡도 장비 점검 결과] " + now.toLocaleString("ko-KR"));
+    lines.push("주소: " + location.href);
+    lines.push("기기: " + navigator.userAgent);
+    lines.push("");
+    for (const c of CHECKS) {
+      const st = state[c.id];
+      lines.push("- " + c.name + " [" + LABEL[st.s] + "] " + st.host + (st.msg ? " · " + st.msg : ""));
+    }
+    if (times.length) {
+      lines.push("");
+      lines.push("평균 인식 시간: " + Math.round(times.reduce((a, b) => a + b, 0) / times.length) + "ms · 최대 인원: " + maxCount + "명");
+    }
+    const text = lines.join("\n");
+    const msg = document.getElementById("copyMsg");
+    try {
+      await navigator.clipboard.writeText(text);
+      msg.textContent = "복사했어요";
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", "");
+      ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand("copy"); } catch (e2) {}
+      ta.remove();
+      msg.textContent = ok ? "복사했어요" : "복사하지 못했어요";
+    }
+    setTimeout(() => { msg.textContent = ""; }, 2500);
+  });
+
+  set("camera", "idle", "‘카메라 켜고 점검 시작’ 버튼을 누르면 확인해요.");
+  set("wake", "idle", "카메라를 켤 때 같이 확인해요.");
+  renderSummary();
+})();
+</script>
+</body>
+</html>

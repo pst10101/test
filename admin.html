@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>혼잡도 관리</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+  .head h1 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(30px, 6vw, 40px); line-height: 1.05; }
+  .head-side { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--muted); }
+  .head-side a { color: var(--accent); font-weight: 600; text-decoration: none; padding: 8px 4px; }
+  .head-side a:hover { text-decoration: underline; }
+
+  .summary { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tally { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; min-width: 112px; }
+  .tally b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 26px; line-height: 1.2; }
+  .tally span { font-size: 13px; color: var(--muted); }
+  .tally[data-s="bad"] b { color: var(--busy); }
+  .tally[data-s="warn"] b { color: var(--normal); }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; min-width: 0; }
+  .panel-head { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .panel-head h2 { margin: 0; font-size: 16px; }
+  .panel-head p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 12.5px; font-weight: 600; color: var(--muted); letter-spacing: .03em; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  .c-room b { font-family: var(--font-display); font-weight: 400; font-size: 22px; display: block; line-height: 1.1; }
+  .c-room span, .sub { color: var(--muted); font-size: 12.5px; }
+  .c-prog { min-width: 180px; }
+  .prog { display: flex; align-items: flex-start; gap: 8px; justify-content: space-between; }
+  .prog > div { min-width: 0; }
+  .prog b { font-weight: 600; display: block; }
+  .edit { min-height: 34px; padding: 4px 10px; font-size: 13px; flex: none; }
+  .stack { display: grid; gap: 3px; justify-items: start; }
+  .seg button { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+  [data-dev="ok"]   { --l: var(--free);   --l-bg: var(--free-bg); }
+  [data-dev="warn"] { --l: var(--normal); --l-bg: var(--normal-bg); }
+  [data-dev="bad"]  { --l: var(--busy);   --l-bg: var(--busy-bg); }
+  [data-dev="idle"] { --l: var(--none);   --l-bg: var(--none-bg); }
+  .bat-low { color: var(--busy); font-weight: 600; }
+
+  /* 좁은 화면: 표 대신 카드 */
+  @media (max-width: 760px) {
+    thead { display: none; }
+    table, tbody, tr, td { display: block; }
+    tr { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+    tr:last-child { border-bottom: 0; }
+    td { padding: 0; border: 0; min-width: 0; }
+    td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+    td.c-room::before { display: none; }
+    td.c-prog, td.c-ovr { grid-column: 1 / -1; }
+  }
+
+  details.links summary { cursor: pointer; padding: 14px 16px; font-weight: 600; list-style-position: inside; }
+  .link-list { padding: 0 16px 16px; display: grid; gap: 6px; }
+  .link-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+  .link-row b { font-family: var(--font-display); font-weight: 400; font-size: 18px; min-width: 40px; }
+  .link-row code { font-family: var(--font-num); font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; background: var(--hall); padding: 6px 8px; border-radius: 8px; }
+  .link-row button { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+
+  /* 로그인 */
+  .gate { max-width: 420px; margin: 8vh auto 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: grid; gap: 14px; }
+  .gate h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 30px; }
+  .gate p { margin: 0; color: var(--muted); }
+  .field { display: grid; gap: 6px; }
+  .field label { font-size: 13.5px; color: var(--muted); }
+  .field input, .field textarea { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 44px; width: 100%; }
+  .field textarea { min-height: 76px; resize: vertical; }
+  .field small { color: var(--muted); font-size: 12.5px; }
+  .err { color: var(--busy); font-size: 14px; margin: 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* 수정 창 */
+  dialog { border: 0; padding: 0; border-radius: 16px; width: 100%; max-width: min(520px, calc(100% - 32px)); background: var(--surface); color: var(--fg); box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  dialog::backdrop { background: rgba(8, 12, 20, .45); }
+  dialog form { padding: 20px; display: grid; gap: 14px; }
+  dialog h2 { margin: 0; font-size: 20px; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .ok-msg { color: var(--free); font-size: 14px; margin: 0; }
+  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 600; z-index: 20; }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="gate" hidden>
+  <form class="gate" id="loginForm" novalidate>
+    <p class="eyebrow">교실 혼잡도</p>
+    <h1>담당자 로그인</h1>
+    <p>Firebase에 등록한 담당자 계정으로 로그인해 주세요.</p>
+    <div class="field"><label for="email">이메일</label><input id="email" type="email" autocomplete="username" required></div>
+    <div class="field"><label for="pw">비밀번호</label><input id="pw" type="password" autocomplete="current-password" required></div>
+    <p class="err" id="loginErr" role="alert" hidden></p>
+    <button type="submit" class="primary" id="loginBtn">로그인</button>
+  </form>
+</div>
+
+<div class="wrap" id="loading">
+  <p class="eyebrow">불러오는 중…</p>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header class="head">
+    <div>
+      <p class="eyebrow" id="eventName"></p>
+      <h1>혼잡도 관리</h1>
+    </div>
+    <div class="head-side">
+      <a href="./" id="visitorLink" target="_blank" rel="noopener">방문자 화면 열기</a>
+      <a href="board.html" target="_blank" rel="noopener">전자칠판 화면 열기</a>
+      <span id="who"></span>
+      <button type="button" id="logout">로그아웃</button>
+    </div>
+  </header>
+
+  <p class="banner" id="demoBanner" hidden><b>예시 모드예요.</b> 가짜 데이터라 고쳐도 새로고침하면 돌아가요. config.js에 Firebase 설정을 넣으면 실제로 저장돼요.</p>
+
+  <section class="summary" aria-label="요약">
+    <div class="tally" id="tOn"><b>0</b><span>작동 중인 태블릿</span></div>
+    <div class="tally" id="tOff"><b>0</b><span>꺼지거나 멈춤</span></div>
+    <div class="tally" id="tBat"><b>0</b><span>배터리 부족</span></div>
+    <div class="tally" id="tOvr"><b>0</b><span>직접 설정한 교실</span></div>
+  </section>
+
+  <section class="panel" aria-labelledby="roomsTitle">
+    <div class="panel-head">
+      <h2 id="roomsTitle">교실별 상태</h2>
+      <p>프로그램 정보는 ‘수정’으로 고칠 수 있어요. 바꾸면 방문자 화면에 바로 반영돼요.</p>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">교실</th>
+          <th scope="col">프로그램</th>
+          <th scope="col">방문자 화면</th>
+          <th scope="col">태블릿</th>
+          <th scope="col">인원</th>
+          <th scope="col">배터리</th>
+          <th scope="col">직접 설정</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <details class="links">
+      <summary>교실 태블릿 주소</summary>
+      <div class="link-list" id="links"></div>
+    </details>
+  </section>
+</div>
+
+<dialog id="editDlg" aria-labelledby="editTitle">
+  <form id="editForm" novalidate>
+    <div>
+      <p class="eyebrow" id="editRoom"></p>
+      <h2 id="editTitle">프로그램 정보 수정</h2>
+    </div>
+    <div class="field"><label for="fTitle">프로그램 이름</label><input id="fTitle" maxlength="40" required></div>
+    <div class="field"><label for="fDesc">소개</label><textarea id="fDesc" maxlength="200"></textarea><small>한두 줄이면 충분해요.</small></div>
+    <div class="field"><label for="fHours">운영 시간</label><input id="fHours" maxlength="40" placeholder="10:00–15:00"></div>
+    <div class="two">
+      <div class="field"><label for="fNormal">이 인원부터 ‘보통’</label><input id="fNormal" type="number" min="1" max="200" inputmode="numeric"></div>
+      <div class="field"><label for="fBusy">이 인원부터 ‘혼잡’</label><input id="fBusy" type="number" min="2" max="300" inputmode="numeric"></div>
+    </div>
+    <p class="err" id="editErr" role="alert" hidden></p>
+    <div class="dlg-actions">
+      <button type="button" id="editCancel">취소</button>
+      <button type="submit" class="primary" id="editSave">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  "use strict";
+  var A = window.App;
+  var $ = function (id) { return document.getElementById(id); };
+  $("eventName").textContent = A.config.eventName || "";
+
+  var statusMap = {}, devMap = {}, infoMap = {};
+  var store = null, started = false;
+
+  function toast(t) {
+    var d = A.el("div", "toast", t);
+    d.setAttribute("role", "status");
+    document.body.appendChild(d);
+    setTimeout(function () { d.remove(); }, 2200);
+  }
+
+  // ---------- 표 만들기 (한 번만) ----------
+  var rows = {};
+  var OVR = [{ v: null, t: "자동" }, { v: 0, t: "여유" }, { v: 1, t: "보통" }, { v: 2, t: "혼잡" }];
+  function td(label, cls) { var c = A.el("td", cls); c.dataset.label = label; return c; }
+
+  A.rooms.forEach(function (r) {
+    var tr = A.el("tr");
+    var cRoom = td("교실", "c-room");
+    cRoom.appendChild(A.el("b", null, r.id));
+    cRoom.appendChild(A.el("span", null, r.name + " · " + r.floor + "층"));
+
+    var cProg = td("프로그램", "c-prog");
+    var prog = A.el("div", "prog");
+    var pBox = A.el("div");
+    var pTitle = A.el("b"); var pHours = A.el("span", "sub");
+    pBox.appendChild(pTitle); pBox.appendChild(pHours);
+    var edit = A.el("button", "edit", "수정");
+    edit.type = "button";
+    edit.addEventListener("click", function () { openEdit(r.id); });
+    prog.appendChild(pBox); prog.appendChild(edit);
+    cProg.appendChild(prog);
+
+    var cVis = td("방문자 화면");
+    var vStack = A.el("div", "stack"); var vPill = A.el("span", "pill"); var vSub = A.el("span", "sub");
+    vStack.appendChild(vPill); vStack.appendChild(vSub); cVis.appendChild(vStack);
+
+    var cDev = td("태블릿");
+    var dStack = A.el("div", "stack"); var dPill = A.el("span", "pill"); var dSub = A.el("span", "sub");
+    dStack.appendChild(dPill); dStack.appendChild(dSub); cDev.appendChild(dStack);
+
+    var cCnt = td("인원", "num");
+    var cBat = td("배터리");
+
+    var cOvr = td("직접 설정", "c-ovr");
+    var seg = A.el("div", "seg");
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", r.id + " 직접 설정");
+    var segBtns = OVR.map(function (o) {
+      var b = A.el("button", null, o.t);
+      b.type = "button";
+      b.addEventListener("click", function () {
+        segBtns.forEach(function (x) { x.disabled = true; });
+        store.setOverride(r.id, o.v).then(function () {
+          toast(r.id + " " + (o.v === null ? "자동으로 돌렸어요" : "‘" + o.t + "’(으)로 설정했어요"));
+        }, function (e) {
+          toast(e && e.code === "permission-denied" ? "저장 권한이 없어요. 다시 로그인해 주세요." : "저장하지 못했어요. 인터넷을 확인해 주세요.");
+        }).then(function () { segBtns.forEach(function (x) { x.disabled = false; }); });
+      });
+      seg.appendChild(b);
+      return b;
+    });
+    cOvr.appendChild(seg);
+
+    [cRoom, cProg, cVis, cDev, cCnt, cBat, cOvr].forEach(function (c) { tr.appendChild(c); });
+    $("tbody").appendChild(tr);
+    rows[r.id] = { pTitle: pTitle, pHours: pHours, vPill: vPill, vSub: vSub, dPill: dPill, dSub: dSub, cCnt: cCnt, cBat: cBat, segBtns: segBtns };
+  });
+
+  // ---------- 태블릿 주소 ----------
+  A.rooms.forEach(function (r) {
+    var url = new URL("counter.html?room=" + encodeURIComponent(r.id), location.href).href;
+    var row = A.el("div", "link-row");
+    row.appendChild(A.el("b", null, r.id));
+    var code = A.el("code", null, url);
+    row.appendChild(code);
+    var b = A.el("button", null, "복사");
+    b.type = "button";
+    b.addEventListener("click", function () {
+      var done = function () { toast(r.id + " 주소를 복사했어요"); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, fallback);
+      } else fallback();
+      function fallback() {
+        var sel = window.getSelection(), range = document.createRange();
+        range.selectNodeContents(code); sel.removeAllRanges(); sel.addRange(range);
+        var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+        toast(ok ? r.id + " 주소를 복사했어요" : "주소를 길게 눌러 복사해 주세요");
+      }
+    });
+    row.appendChild(b);
+    $("links").appendChild(row);
+  });
+
+  // ---------- 그리기 ----------
+  function render() {
+    var now = Date.now();
+    var on = 0, off = 0, low = 0, ovr = 0;
+    A.mergeAll(infoMap).forEach(function (r) {
+      var row = rows[r.id];
+      var st = statusMap[r.id], dev = devMap[r.id];
+      row.pTitle.textContent = r.title;
+      row.pHours.textContent = r.hours || "운영 시간 미정";
+
+      var e = A.effective(st, now);
+      row.vPill.dataset.l = A.levelKey(e.level);
+      row.vPill.textContent = A.levelLabel(e.level);
+      row.vSub.textContent = e.source === "override" ? "직접 설정 · " + A.ago(e.at, now)
+        : e.source === "auto" ? "카메라 · " + A.ago(e.at, now)
+        : e.source === "stale" ? "소식 끊김 · " + A.ago(e.at, now) : "기록 없음";
+
+      var ds, dt;
+      if (!dev || !dev.at) { ds = "idle"; dt = "연결 기록 없음"; off++; }
+      else if (dev.running === false) { ds = "warn"; dt = "멈춤"; off++; }
+      else if (now - dev.at > A.OFFLINE_MS) { ds = "bad"; dt = "꺼짐"; off++; }
+      else { ds = "ok"; dt = "작동 중"; on++; }
+      row.dPill.dataset.dev = ds;
+      row.dPill.textContent = dt;
+      row.dSub.textContent = dev && dev.at ? "신호 " + A.ago(dev.at, now) + (dev.ms ? " · " + dev.ms + "ms" : "") : "";
+
+      row.cCnt.textContent = dev && typeof dev.count === "number" ? dev.count + "명" : "–";
+
+      row.cBat.textContent = "";
+      if (dev && typeof dev.battery === "number") {
+        var pct = Math.round(dev.battery * 100);
+        var isLow = !dev.charging && pct <= 25;
+        if (isLow) low++;
+        var s = A.el("span", isLow ? "bat-low" : null, pct + "%");
+        row.cBat.appendChild(s);
+        row.cBat.appendChild(A.el("span", "sub", dev.charging ? " 충전 중" : " 충전 안 됨"));
+      } else {
+        row.cBat.textContent = "–";
+      }
+
+      var cur = st && A.isLevel(st.override) ? st.override : null;
+      if (cur !== null) ovr++;
+      row.segBtns.forEach(function (b, i) { b.setAttribute("aria-pressed", OVR[i].v === cur ? "true" : "false"); });
+    });
+    setTally("tOn", on, "");
+    setTally("tOff", off, off ? "bad" : "");
+    setTally("tBat", low, low ? "bad" : "");
+    setTally("tOvr", ovr, ovr ? "warn" : "");
+  }
+  function setTally(id, n, s) { var t = $(id); t.querySelector("b").textContent = n; t.dataset.s = s; }
+
+  // ---------- 프로그램 정보 수정 ----------
+  var dlg = $("editDlg"), editId = null;
+  function openEdit(id) {
+    editId = id;
+    var r = A.mergeRoom(A.room(id), infoMap[id]);
+    $("editRoom").textContent = r.name + " · " + r.floor + "층";
+    $("fTitle").value = r.title || "";
+    $("fDesc").value = r.desc || "";
+    $("fHours").value = r.hours || "";
+    $("fNormal").value = r.normalAt;
+    $("fBusy").value = r.busyAt;
+    $("editErr").hidden = true;
+    $("editSave").disabled = false;
+    if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+    $("fTitle").focus();
+  }
+  $("editCancel").addEventListener("click", function () { dlg.close(); });
+  dlg.addEventListener("click", function (ev) { if (ev.target === dlg) dlg.close(); });
+  $("editForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var title = $("fTitle").value.trim();
+    var normalAt = parseInt($("fNormal").value, 10);
+    var busyAt = parseInt($("fBusy").value, 10);
+    var err = "";
+    if (!title) err = "프로그램 이름을 적어 주세요.";
+    else if (!(normalAt >= 1)) err = "‘보통’ 기준 인원은 1명 이상이어야 해요.";
+    else if (!(busyAt > normalAt)) err = "‘혼잡’ 기준 인원은 ‘보통’보다 커야 해요.";
+    if (err) { $("editErr").textContent = err; $("editErr").hidden = false; return; }
+    $("editSave").disabled = true;
+    var id = editId;
+    store.saveRoom(id, {
+      title: title,
+      desc: $("fDesc").value.trim(),
+      hours: $("fHours").value.trim(),
+      normalAt: normalAt,
+      busyAt: busyAt
+    }).then(function () {
+      dlg.close();
+      toast(id + " 정보를 저장했어요");
+    }, function (e) {
+      $("editErr").textContent = e && e.code === "permission-denied"
+        ? "저장 권한이 없어요. 다시 로그인하거나 Firestore 규칙을 확인해 주세요."
+        : "저장하지 못했어요. 인터넷 연결을 확인해 주세요.";
+      $("editErr").hidden = false;
+      $("editSave").disabled = false;
+    });
+  });
+
+  // ---------- 로그인 ----------
+  $("loginForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var email = $("email").value.trim(), pw = $("pw").value;
+    if (!email || !pw) { $("loginErr").textContent = "이메일과 비밀번호를 모두 입력해 주세요."; $("loginErr").hidden = false; return; }
+    $("loginBtn").disabled = true;
+    $("loginErr").hidden = true;
+    store.signIn(email, pw).catch(function (e) {
+      $("loginErr").textContent = A.authErrorText(e);
+      $("loginErr").hidden = false;
+    }).then(function () { $("loginBtn").disabled = false; });
+  });
+  $("logout").addEventListener("click", function () { store.signOut(); });
+
+  var unsubs = [], tickTimer = null;
+  function startData() {
+    if (started) return;
+    started = true;
+    unsubs.push(store.onStatus(function (m) { statusMap = m; render(); }, function () { toast("상태를 불러오지 못했어요"); }));
+    unsubs.push(store.onDevices(function (m) { devMap = m; render(); }, function () { toast("태블릿 정보를 불러오지 못했어요. 다시 로그인해 주세요."); }));
+    unsubs.push(store.onRooms(function (m) { infoMap = m; render(); }, function () {}));
+    tickTimer = setInterval(render, 15000);
+  }
+  function stopData() {
+    unsubs.forEach(function (u) { try { u(); } catch (e) {} });
+    unsubs = [];
+    clearInterval(tickTimer);
+    started = false;
+  }
+
+  render();
+  if (A.demo) { $("demoBanner").hidden = false; $("logout").hidden = true; }
+
+  A.store({ auth: true }).then(function (s) {
+    store = s;
+    s.onAuth(function (user) {
+      $("loading").hidden = true;
+      $("gate").hidden = !!user;
+      $("app").hidden = !user;
+      $("who").textContent = user ? user.email : "";
+      if (user) startData(); else stopData();
+    });
+  }).catch(function () {
+    $("loading").innerHTML = "";
+    $("loading").appendChild(A.el("p", "err", "서버에 연결하지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요."));
+  });
+})();
+</script>
+</body>
+</html>

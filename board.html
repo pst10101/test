@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>혼잡도 전광판</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* 전자칠판용: 스크롤 없이 한 화면.
+     삼성 Flip 같은 옛날 내장 브라우저에서도 돌아가게 grid·gap·min() 없이 flex와 여백만 써요.
+     모든 크기는 화면에 맞춰 늘고 줄어드는 단위(--u)로. */
+  :root { --u: 1vh; --gap: calc(var(--u) * 1.1); }
+  @supports (width: min(1px, 2px)) { :root { --u: min(1vh, 0.5625vw); } }
+
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    margin: 0;
+    box-sizing: border-box;
+    font-size: calc(var(--u) * 2);
+    padding: calc(var(--u) * 2.4) calc(var(--u) * 3.4);
+    display: -webkit-box; display: -webkit-flex; display: flex;
+    -webkit-flex-direction: column; flex-direction: column;
+  }
+  body.idle, body.idle * { cursor: none !important; }
+
+  .head { display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; -webkit-align-items: flex-end; align-items: flex-end; -webkit-flex: none; flex: none; margin-bottom: calc(var(--u) * 2.2); }
+  .head .eyebrow { font-size: calc(var(--u) * 2); margin: 0; }
+  .head h1 { margin: calc(var(--u) * .4) 0 0; font-family: var(--font-display); font-weight: 400; font-size: calc(var(--u) * 7); line-height: 1; letter-spacing: -.01em; }
+  .head-right { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }
+  .legend { display: -webkit-flex; display: flex; margin-right: calc(var(--u) * 3); }
+  .legend .pill { font-size: calc(var(--u) * 2.1); padding: calc(var(--u) * .5) calc(var(--u) * 1.4); }
+  .legend .pill + .pill { margin-left: var(--u); }
+  .legend .pill::before { width: calc(var(--u) * 1.1); height: calc(var(--u) * 1.1); margin-right: calc(var(--u) * .8); }
+  .clock { font-family: var(--font-display); font-size: calc(var(--u) * 7); line-height: 1; font-variant-numeric: tabular-nums; }
+
+  .main { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-height: 0; display: -webkit-flex; display: flex; }
+
+  .floors { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; margin-right: calc(var(--u) * 2.4); }
+  .floor { -webkit-flex: 1 1 0; flex: 1 1 0; min-height: 0; display: -webkit-flex; display: flex; }
+  .floor + .floor { margin-top: calc(var(--u) * 1.6); }
+  .floor-no {
+    -webkit-flex: none; flex: none; width: calc(var(--u) * 10); margin: 0 calc(var(--u) * 1.4) 0 0;
+    display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+    -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: calc(var(--u) * 1.6);
+    font-size: calc(var(--u) * 2); color: var(--muted); font-weight: 500;
+  }
+  .floor-no b { font-family: var(--font-display); font-weight: 400; font-size: calc(var(--u) * 8); line-height: 1; color: var(--fg); }
+  .hall {
+    -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; display: -webkit-flex; display: flex;
+    background: var(--hall); border-radius: calc(var(--u) * 1.6); padding: var(--gap); box-sizing: border-box;
+  }
+  .room {
+    -webkit-flex: none; flex: none; box-sizing: border-box;
+    width: calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols));
+    background: var(--l-bg); border: calc(var(--u) * .2) solid var(--l-edge); border-radius: calc(var(--u) * 1.3);
+    padding: calc(var(--u) * 1.4) calc(var(--u) * 1.6); overflow: hidden;
+    display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+  }
+  .room + .room { margin-left: var(--gap); }
+  .room-top { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-justify-content: space-between; justify-content: space-between; -webkit-align-items: center; align-items: center; margin-bottom: calc(var(--u) * .5); }
+  .room-no { font-family: var(--font-display); font-size: calc(var(--u) * 5.2); line-height: 1; white-space: nowrap; -webkit-flex: none; flex: none; margin-right: var(--u); }
+  .room-lv { display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; font-weight: 700; font-size: calc(var(--u) * 2.8); color: var(--l); white-space: nowrap; }
+  .room[data-l="none"] .room-lv { font-size: calc(var(--u) * 2.2); }
+  .room-lv::before { content: ""; -webkit-flex: none; flex: none; width: calc(var(--u) * 1.4); height: calc(var(--u) * 1.4); border-radius: 50%; background: currentColor; margin-right: calc(var(--u) * .7); }
+  .room-title { font-size: calc(var(--u) * 2.4); font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .room-hours { margin-top: auto; padding-top: calc(var(--u) * .5); font-size: calc(var(--u) * 1.8); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .side { -webkit-flex: none; flex: none; width: calc(var(--u) * 40); display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; min-height: 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: calc(var(--u) * 1.6); padding: calc(var(--u) * 2); box-sizing: border-box; min-height: 0; }
+  .card + .card { margin-top: calc(var(--u) * 1.6); }
+  .card.grow { -webkit-flex: 1 1 auto; flex: 1 1 auto; overflow: hidden; }
+  .card h2 { margin: 0 0 calc(var(--u) * 1.4); font-size: calc(var(--u) * 2.6); font-weight: 700; }
+  .quiet-item { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; background: var(--free-bg); border: calc(var(--u) * .2) solid var(--free-edge); border-radius: calc(var(--u) * 1.2); padding: var(--u) calc(var(--u) * 1.4); }
+  .quiet-item + .quiet-item { margin-top: var(--u); }
+  .quiet-item b { font-family: var(--font-display); font-weight: 400; font-size: calc(var(--u) * 4.4); color: var(--free); line-height: 1; margin-right: calc(var(--u) * 1.4); -webkit-flex: none; flex: none; }
+  .quiet-item span { font-size: calc(var(--u) * 2.2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .quiet-empty { margin: 0; color: var(--muted); font-size: calc(var(--u) * 2.2); }
+  .guide { margin: 0; font-size: calc(var(--u) * 2.4); font-weight: 600; line-height: 1.45; }
+  .status { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; font-size: calc(var(--u) * 1.6); color: var(--muted); margin-top: calc(var(--u) * 1.2); }
+  .status i { -webkit-flex: none; flex: none; width: var(--u); height: var(--u); border-radius: 50%; background: var(--none); margin-right: calc(var(--u) * .8); }
+  .status[data-s="ok"] i { background: var(--free); }
+  .status[data-s="bad"] i { background: var(--busy); }
+
+  .fs {
+    position: fixed; right: calc(var(--u) * 2); bottom: calc(var(--u) * 2);
+    right: calc(env(safe-area-inset-right, 0px) + var(--u) * 2); bottom: calc(env(safe-area-inset-bottom, 0px) + var(--u) * 2);
+    font-size: calc(var(--u) * 1.8); min-height: calc(var(--u) * 5); padding: 0 calc(var(--u) * 2); opacity: .9;
+  }
+  body.idle .fs { opacity: 0; pointer-events: none; }
+  .demo-tag { position: fixed; left: 50%; top: var(--u); -webkit-transform: translateX(-50%); transform: translateX(-50%); font-size: calc(var(--u) * 1.6); background: var(--fg); color: var(--bg); padding: calc(var(--u) * .4) calc(var(--u) * 1.4); border-radius: 999px; }
+
+  /* 세로로 세운 화면 */
+  @media (max-aspect-ratio: 1/1) {
+    :root { --u: 0.6vh; }
+    .main { -webkit-flex-direction: column; flex-direction: column; }
+    .floors { margin: 0 0 calc(var(--u) * 2.4) 0; }
+    .side { width: auto; -webkit-flex-direction: row; flex-direction: row; }
+    .side .card { -webkit-flex: 1 1 0; flex: 1 1 0; }
+    .card + .card { margin-top: 0; margin-left: calc(var(--u) * 1.6); }
+    .legend { display: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="head">
+    <div>
+      <p class="eyebrow" id="eventName"></p>
+      <h1>지금 교실 혼잡도</h1>
+    </div>
+    <div class="head-right">
+      <div class="legend">
+        <span class="pill" data-l="free">여유</span>
+        <span class="pill" data-l="normal">보통</span>
+        <span class="pill" data-l="busy">혼잡</span>
+        <span class="pill" data-l="none">정보 없음</span>
+      </div>
+      <div class="clock" id="clock">--:--</div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="floors" id="floors" aria-label="층별 교실"></section>
+    <aside class="side">
+      <section class="card grow" aria-labelledby="quietTitle">
+        <h2 id="quietTitle">지금 한산한 곳</h2>
+        <div id="quiet"></div>
+      </section>
+      <section class="card">
+        <p class="guide">초록색 교실부터 가 보세요. 빨간색 교실은 조금 뒤에 다시 확인해 주세요.</p>
+        <div class="status" id="status"><i></i><span id="statusText">불러오는 중</span></div>
+      </section>
+    </aside>
+  </main>
+
+  <button type="button" class="fs" id="fsBtn">전체 화면</button>
+  <div class="demo-tag" id="demoTag" hidden>예시 데이터</div>
+
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  "use strict";
+  var A = window.App;
+  var $ = function (id) { return document.getElementById(id); };
+  var params = new URLSearchParams(location.search);
+  var theme = params.get("theme");
+  if (theme === "dark" || theme === "light") document.documentElement.setAttribute("data-theme", theme);
+
+  $("eventName").textContent = A.config.eventName || "";
+  if (A.demo) $("demoTag").hidden = false;
+
+  var statusMap = {}, infoMap = {}, gotStatus = false, connErr = false, mode = "";
+
+  // ---------- 시계 ----------
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function tickClock() { var d = new Date(); $("clock").textContent = pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  tickClock(); setInterval(tickClock, 10000);
+
+  // ---------- 층별 칸 (한 번만 만들기) ----------
+  var floors = A.floors();
+  var maxCols = 1;
+  floors.forEach(function (f) { maxCols = Math.max(maxCols, A.rooms.filter(function (r) { return r.floor === f; }).length); });
+  document.documentElement.style.setProperty("--cols", String(maxCols));
+
+  var tiles = {};
+  floors.forEach(function (f) {
+    var sec = A.el("section", "floor");
+    var h = A.el("h2", "floor-no");
+    h.appendChild(A.el("b", null, String(f)));
+    h.appendChild(document.createTextNode("층"));
+    var hall = A.el("div", "hall");
+    A.rooms.filter(function (r) { return r.floor === f; }).forEach(function (r) {
+      var d = A.el("div", "room");
+      var top = A.el("div", "room-top");
+      top.appendChild(A.el("span", "room-no", r.id));
+      var lv = A.el("span", "room-lv");
+      top.appendChild(lv);
+      var t = A.el("div", "room-title");
+      var hrs = A.el("div", "room-hours");
+      d.appendChild(top); d.appendChild(t); d.appendChild(hrs);
+      hall.appendChild(d);
+      tiles[r.id] = { box: d, lv: lv, title: t, hours: hrs };
+    });
+    sec.appendChild(h); sec.appendChild(hall);
+    $("floors").appendChild(sec);
+  });
+
+  // ---------- 그리기 ----------
+  function render() {
+    var now = Date.now();
+    var items = A.mergeAll(infoMap).map(function (r) { return { r: r, e: A.effective(statusMap[r.id], now) }; });
+    items.forEach(function (it) {
+      var t = tiles[it.r.id];
+      t.box.setAttribute("data-l", A.levelKey(it.e.level));
+      t.lv.textContent = A.levelLabel(it.e.level);
+      t.title.textContent = it.r.title;
+      t.hours.textContent = it.r.hours || "";
+    });
+
+    var q = $("quiet");
+    q.innerHTML = "";
+    var quiet = items.filter(function (it) { return it.e.level === 0; })
+      .sort(function (a, b) { return (a.e.count || 0) - (b.e.count || 0); })
+      .slice(0, 5);
+    if (!gotStatus) q.appendChild(A.el("p", "quiet-empty", "교실 상황을 불러오는 중이에요."));
+    else if (!quiet.length) q.appendChild(A.el("p", "quiet-empty", "지금은 여유 있는 교실이 없어요."));
+    else quiet.forEach(function (it) {
+      var d = A.el("div", "quiet-item");
+      d.appendChild(A.el("b", null, it.r.id));
+      d.appendChild(A.el("span", null, it.r.title));
+      q.appendChild(d);
+    });
+
+    var s = $("status");
+    var text, st;
+    if (A.demo) { st = "ok"; text = "예시 데이터로 보여주는 중"; }
+    else if (connErr) { st = "bad"; text = "서버 연결 끊김 · 다시 연결하는 중"; }
+    else if (!gotStatus) { st = ""; text = "불러오는 중"; }
+    else if (mode === "rest") { st = "ok"; text = "1분마다 갱신 · " + pad(new Date().getHours()) + ":" + pad(new Date().getMinutes()) + " 기준"; }
+    else { st = "ok"; text = "실시간 · 교실 카메라가 사람 수만 세요"; }
+    s.setAttribute("data-s", st);
+    $("statusText").textContent = text;
+  }
+  render();
+  setInterval(render, 20000);
+
+  // ---------- 데이터: 실시간 연결, 안 되면 1분마다 받아오기 ----------
+  var unsubs = [];
+  function use(store, m) {
+    unsubs.forEach(function (u) { try { u(); } catch (e) {} });
+    unsubs = [];
+    mode = m;
+    unsubs.push(store.onStatus(function (map) { statusMap = map; gotStatus = true; connErr = false; render(); },
+      function () { connErr = true; render(); }));
+    unsubs.push(store.onRooms(function (map) { infoMap = map; render(); }, function () {}));
+  }
+  function fallback() { if (mode !== "rest" && !A.demo) use(A.restStore(), "rest"); }
+
+  A.store().then(function (store) {
+    if (mode !== "rest") use(store, A.demo ? "demo" : "live");
+  }).catch(fallback);
+  // 15초 안에 실시간 연결이 안 되면 (옛날 브라우저 등) 받아오기 방식으로 바꿔요
+  setTimeout(function () { if (!gotStatus) fallback(); }, 15000);
+
+  // 하루 종일 켜 둘 때를 대비해 3시간마다 새로고침.
+  // 단, 사이트(GitHub 등)가 지금 열리는지 먼저 확인하고, 안 열리면 10분 뒤에 다시 확인해요.
+  // (서버가 잠깐 죽었을 때 새로고침하면 빈 화면으로 멈추기 때문)
+  function safeReload() {
+    var retry = function () { setTimeout(safeReload, 10 * 60000); };
+    if (navigator.onLine === false || !window.fetch) { retry(); return; }
+    fetch("board.html", { cache: "no-store" }).then(function (r) {
+      if (r.ok) location.reload(); else retry();
+    }, retry);
+  }
+  setTimeout(safeReload, 3 * 3600 * 1000);
+
+  // ---------- 화면 켜짐 유지 · 전체 화면 · 커서 숨기기 ----------
+  var wakeLock = null;
+  function requestWake() {
+    if (!("wakeLock" in navigator) || wakeLock) return;
+    navigator.wakeLock.request("screen").then(function (w) {
+      wakeLock = w;
+      w.addEventListener("release", function () { wakeLock = null; });
+    }).catch(function () {});
+  }
+  requestWake();
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) requestWake(); });
+
+  var de = document.documentElement;
+  var reqFs = de.requestFullscreen || de.webkitRequestFullscreen;
+  var exitFs = document.exitFullscreen || document.webkitExitFullscreen;
+  function fsEl() { return document.fullscreenElement || document.webkitFullscreenElement; }
+  var fsBtn = $("fsBtn");
+  if (!reqFs) fsBtn.hidden = true;
+  fsBtn.addEventListener("click", function () {
+    requestWake();
+    try {
+      var p = fsEl() ? exitFs.call(document) : reqFs.call(de);
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  });
+  function fsChanged() { fsBtn.textContent = fsEl() ? "전체 화면 끄기" : "전체 화면"; }
+  document.addEventListener("fullscreenchange", fsChanged);
+  document.addEventListener("webkitfullscreenchange", fsChanged);
+
+  var idleTimer = null;
+  function wake() {
+    document.body.classList.remove("idle");
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () { document.body.classList.add("idle"); }, 4000);
+  }
+  ["mousemove", "mousedown", "keydown", "touchstart"].forEach(function (ev) { document.addEventListener(ev, wake, false); });
+  wake();
+})();
+</script>
+</body>
+</html>
