@@ -20,7 +20,7 @@
     { key: "busy", label: "혼잡" }
   ];
 
-  // 방문자 화면: 이 시간 넘게 소식이 없으면 '정보 없음'
+  // 전자칠판: 이 시간 넘게 소식이 없으면 '정보 없음'
   var STALE_MS = COUNTER.refreshMin * 60000 * 2 + 120000;
   // 관리 화면: 이 시간 넘게 신호가 없으면 '꺼짐'
   var OFFLINE_MS = Math.max(COUNTER.heartbeatSec * 3000, 120000);
@@ -78,7 +78,7 @@
     return mergeRoom(base, m);
   }
 
-  // 방문자에게 보여줄 최종 교실 목록:
+  // 전자칠판에 보여줄 최종 교실 목록:
   //  config.js 기본 목록 (삭제 표시된 것은 뺌) + 관리 화면에서 추가한 교실 (id 순서로 뒤에 붙임)
   function mergeAll(map) {
     map = map || {};
@@ -123,7 +123,7 @@
 
   function isLevel(v) { return v === 0 || v === 1 || v === 2; }
 
-  // 방문자에게 보여줄 최종 상태
+  // 전자칠판에 보여줄 최종 상태
   function effective(st, now) {
     now = now || Date.now();
     if (!st) return { level: null, source: "none", at: 0 };

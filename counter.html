@@ -157,7 +157,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
     <p>카메라 권한을 물어보면 허용을 눌러 주세요. 태블릿은 교실 뒤쪽 높은 곳에서 교실 전체가 보이게 두고, 충전기를 꽂아 두세요.</p>
     <p class="chip" id="modelChip" data-s=""><i></i><span id="modelText">AI 모델 준비 중</span></p>
     <p class="err" id="readyErr" role="alert" hidden></p>
-    <p class="err" id="removedNote" role="status" hidden>이 교실은 담당자 화면에서 삭제됐어요. 방문자 화면에는 보이지 않아요.</p>
+    <p class="err" id="removedNote" role="status" hidden>이 교실은 담당자 화면에서 삭제됐어요. 전자칠판에는 보이지 않아요.</p>
     <p class="auto-note" id="autoNote" role="status" hidden></p>
     <button type="button" class="primary" id="startBtn">카운트 시작</button>
     <div class="actions">
@@ -200,7 +200,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
         <span>세는 간격 <b class="num" id="stInt"></b></span>
       </div>
       <p class="msg" id="runMsg" role="alert" hidden></p>
-      <p class="msg" id="removedRun" role="status" hidden>이 교실은 담당자 화면에서 삭제됐어요. 방문자 화면에는 보이지 않아요.</p>
+      <p class="msg" id="removedRun" role="status" hidden>이 교실은 담당자 화면에서 삭제됐어요. 전자칠판에는 보이지 않아요.</p>
       <div class="actions" id="lockedActions">
         <button type="button" id="unlockBtn">담당자 메뉴</button>
       </div>
@@ -629,7 +629,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
     s.onRoom(room.id, function (st) {
       var o = $("override");
       if (st && A.isLevel(st.override)) {
-        o.textContent = "담당자가 '" + A.levelLabel(st.override) + "'(으)로 직접 설정해 둔 상태예요. 방문자 화면에는 이 값이 보여요.";
+        o.textContent = "담당자가 '" + A.levelLabel(st.override) + "'(으)로 직접 설정해 둔 상태예요. 전자칠판에는 이 값이 보여요.";
         o.hidden = false;
       } else {
         o.hidden = true;

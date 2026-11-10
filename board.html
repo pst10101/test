@@ -60,7 +60,13 @@
     background: var(--l-bg); border: calc(var(--u) * .2) solid var(--l-edge); border-radius: calc(var(--u) * 1.3);
     padding: calc(var(--u) * 1.4) calc(var(--u) * 1.6); overflow: hidden;
     display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+    cursor: pointer; -webkit-tap-highlight-color: rgba(0,0,0,0); -ms-touch-action: manipulation; touch-action: manipulation;
+    -webkit-user-select: none; user-select: none;
+    -webkit-transition: opacity .2s; transition: opacity .2s;
   }
+  .room.dim { opacity: .22; }
+  .room:active { -webkit-transform: scale(.985); transform: scale(.985); }
+  .room:focus { outline: calc(var(--u) * .3) solid var(--accent); outline-offset: calc(var(--u) * .2); }
   .room + .room { margin-left: var(--gap); }
   .room-top { display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-justify-content: space-between; justify-content: space-between; -webkit-align-items: center; align-items: center; margin-bottom: calc(var(--u) * .5); }
   .room-no { font-family: var(--font-display); font-size: calc(var(--u) * 5.2); line-height: 1; white-space: nowrap; -webkit-flex: none; flex: none; margin-right: var(--u); }
@@ -76,6 +82,7 @@
   .card.grow { -webkit-flex: 1 1 auto; flex: 1 1 auto; overflow: hidden; }
   .card h2 { margin: 0 0 calc(var(--u) * 1.4); font-size: calc(var(--u) * 2.6); font-weight: 700; }
   .quiet-item { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; background: var(--free-bg); border: calc(var(--u) * .2) solid var(--free-edge); border-radius: calc(var(--u) * 1.2); padding: var(--u) calc(var(--u) * 1.4); }
+  .quiet-item { cursor: pointer; -webkit-tap-highlight-color: rgba(0,0,0,0); -ms-touch-action: manipulation; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
   .quiet-item + .quiet-item { margin-top: var(--u); }
   .quiet-item b { font-family: var(--font-display); font-weight: 400; font-size: calc(var(--u) * 4.4); color: var(--free); line-height: 1; margin-right: calc(var(--u) * 1.4); -webkit-flex: none; flex: none; }
   .quiet-item span { font-size: calc(var(--u) * 2.2); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -86,12 +93,60 @@
   .status[data-s="ok"] i { background: var(--free); }
   .status[data-s="bad"] i { background: var(--busy); }
 
-  .fs {
+  /* 학년 보기 (누르면 그 학년 교실만 또렷하게 보여요. 한참 안 만지면 '전체'로 돌아와요) */
+  .grade-card { -webkit-flex: none; flex: none; padding: calc(var(--u) * 1.4) calc(var(--u) * 1.6); }
+  .grade-card .lab { margin: 0 0 calc(var(--u) * .9); font-size: calc(var(--u) * 1.8); font-weight: 600; color: var(--muted); }
+  .grades { display: -webkit-flex; display: flex; }
+  .grades .chip {
+    -webkit-flex: 1 1 0; flex: 1 1 0; min-width: 0; box-sizing: border-box;
+    height: calc(var(--u) * 6.2); min-height: 0; padding: 0 calc(var(--u) * .4); margin: 0;
+    border: calc(var(--u) * .2) solid var(--line); border-radius: 999px; background: var(--hall); color: var(--fg);
+    font-size: calc(var(--u) * 2.3); font-weight: 700; line-height: calc(var(--u) * 5.8); text-align: center; white-space: nowrap; overflow: hidden;
+    cursor: pointer; -webkit-tap-highlight-color: rgba(0,0,0,0); -ms-touch-action: manipulation; touch-action: manipulation;
+  }
+  .grades .chip + .chip { margin-left: var(--u); }
+  .grades .chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+  /* 교실 상세 팝업 (교실 칸을 누르면 떠요. 한참 안 만지면 저절로 닫혀요)
+     <dialog>는 옛날 브라우저에서 안 될 수 있어서 그냥 위에 덮는 판으로 만들었어요. */
+  .ov {
+    position: fixed; left: 0; top: 0; right: 0; bottom: 0; z-index: 50;
+    background: rgba(8, 12, 20, .62); padding: calc(var(--u) * 4); box-sizing: border-box;
+    display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;
+  }
+  .panel {
+    width: calc(var(--u) * 96); max-width: 100%; max-height: 100%; overflow: hidden; box-sizing: border-box;
+    background: var(--surface); color: var(--fg); border-radius: calc(var(--u) * 2.4);
+    box-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 6) rgba(0, 0, 0, .35);
+  }
+  .band { background: var(--l-bg); color: var(--l); padding: calc(var(--u) * 2.6) calc(var(--u) * 3.2); display: -webkit-flex; display: flex; -webkit-justify-content: space-between; justify-content: space-between; -webkit-align-items: flex-start; align-items: flex-start; }
+  .band-lv { font-family: var(--font-display); font-size: calc(var(--u) * 7.5); line-height: 1; }
+  .band-state { margin: calc(var(--u) * 1) 0 0; font-size: calc(var(--u) * 2.4); font-weight: 600; }
+  .x {
+    -webkit-flex: none; flex: none; box-sizing: border-box; width: calc(var(--u) * 8); height: calc(var(--u) * 8); min-height: 0; padding: 0; margin: 0 0 0 calc(var(--u) * 2);
+    border: 0; border-radius: 50%; background: var(--surface); color: var(--fg);
+    font-size: calc(var(--u) * 5); line-height: calc(var(--u) * 7.6); text-align: center; cursor: pointer;
+  }
+  .sheet { padding: calc(var(--u) * 3) calc(var(--u) * 3.2); }
+  .sheet .eyebrow { margin: 0; font-size: calc(var(--u) * 2.2); }
+  .sheet h3 { margin: calc(var(--u) * .6) 0 0; font-size: calc(var(--u) * 5); font-weight: 700; line-height: 1.2; }
+  .sheet .desc { margin: calc(var(--u) * 1.6) 0 0; font-size: calc(var(--u) * 2.8); line-height: 1.5; }
+  .info { margin: calc(var(--u) * 2.6) 0 0; }
+  .info-row { display: -webkit-flex; display: flex; font-size: calc(var(--u) * 2.6); }
+  .info-row + .info-row { margin-top: calc(var(--u) * 1); }
+  .info-row dt { -webkit-flex: none; flex: none; width: calc(var(--u) * 14); margin: 0; color: var(--muted); }
+  .info-row dd { margin: 0; font-weight: 600; }
+  .ov-hint { margin: calc(var(--u) * 2.6) 0 0; font-size: calc(var(--u) * 1.7); color: var(--muted); }
+
+  /* 오른쪽 아래 버튼 (어두운/밝은 화면, 전체 화면). 한동안 안 만지면 숨어요 */
+  .tools {
     position: fixed; right: calc(var(--u) * 2); bottom: calc(var(--u) * 2);
     right: calc(env(safe-area-inset-right, 0px) + var(--u) * 2); bottom: calc(env(safe-area-inset-bottom, 0px) + var(--u) * 2);
-    font-size: calc(var(--u) * 1.8); min-height: calc(var(--u) * 5); padding: 0 calc(var(--u) * 2); opacity: .9;
+    display: -webkit-flex; display: flex; opacity: .92;
   }
-  body.idle .fs { opacity: 0; pointer-events: none; }
+  .tools button { font-size: calc(var(--u) * 1.8); min-height: calc(var(--u) * 5); padding: 0 calc(var(--u) * 2); cursor: pointer; -ms-touch-action: manipulation; touch-action: manipulation; }
+  .tools button + button { margin-left: var(--u); }
+  body.idle .tools { opacity: 0; pointer-events: none; }
   .demo-tag { position: fixed; left: 50%; top: var(--u); -webkit-transform: translateX(-50%); transform: translateX(-50%); font-size: calc(var(--u) * 1.6); background: var(--fg); color: var(--bg); padding: calc(var(--u) * .4) calc(var(--u) * 1.4); border-radius: 999px; }
 
   /* 세로로 세운 화면 */
@@ -102,6 +157,9 @@
     .side { width: auto; -webkit-flex-direction: row; flex-direction: row; }
     .side .card { -webkit-flex: 1 1 0; flex: 1 1 0; }
     .card + .card { margin-top: 0; margin-left: calc(var(--u) * 1.6); }
+    .side { -webkit-flex-wrap: wrap; flex-wrap: wrap; }
+    .side .grade-card { -webkit-flex: 1 1 100%; flex: 1 1 100%; margin: 0 0 calc(var(--u) * 1.6) 0; }
+    .side .grade-card + .card { margin-left: 0; }
     .legend { display: none; }
   }
 </style>
@@ -126,18 +184,48 @@
   <main class="main">
     <section class="floors" id="floors" aria-label="층별 교실"></section>
     <aside class="side">
+      <section class="card grade-card" id="gradeCard" aria-labelledby="gradeLab" hidden>
+        <p class="lab" id="gradeLab">학년 골라 보기</p>
+        <div class="grades" id="grades"></div>
+      </section>
       <section class="card grow" aria-labelledby="quietTitle">
         <h2 id="quietTitle">지금 한산한 곳</h2>
         <div id="quiet"></div>
       </section>
       <section class="card">
-        <p class="guide">초록색 교실부터 가 보세요. 빨간색 교실은 조금 뒤에 다시 확인해 주세요.</p>
+        <p class="guide">초록색 교실부터 가 보세요. 교실을 누르면 소개와 운영 시간이 나와요.</p>
         <div class="status" id="status"><i></i><span id="statusText">불러오는 중</span></div>
       </section>
     </aside>
   </main>
 
-  <button type="button" class="fs" id="fsBtn">전체 화면</button>
+  <!-- 교실 상세 팝업 -->
+  <div class="ov" id="detail" role="dialog" aria-modal="true" aria-labelledby="dTitle" hidden>
+    <div class="panel" id="panel">
+      <div class="band" id="dBand">
+        <div>
+          <div class="band-lv" id="dLevel"></div>
+          <p class="band-state" id="dState"></p>
+        </div>
+        <button type="button" class="x" id="dClose" aria-label="닫기">×</button>
+      </div>
+      <div class="sheet">
+        <p class="eyebrow" id="dRoom"></p>
+        <h3 id="dTitle"></h3>
+        <p class="desc" id="dDesc"></p>
+        <dl class="info">
+          <div class="info-row"><dt>운영 시간</dt><dd id="dHours"></dd></div>
+          <div class="info-row"><dt>위치</dt><dd id="dWhere"></dd></div>
+        </dl>
+        <p class="ov-hint">아무 데나 누르면 닫혀요. 잠시 뒤에 저절로 닫혀요.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tools">
+    <button type="button" id="themeBtn">어두운 화면</button>
+    <button type="button" id="fsBtn">전체 화면</button>
+  </div>
   <div class="demo-tag" id="demoTag" hidden>예시 데이터</div>
 
 <script src="config.js"></script>
@@ -148,13 +236,52 @@
   var A = window.App;
   var $ = function (id) { return document.getElementById(id); };
   var params = new URLSearchParams(location.search);
-  var theme = params.get("theme");
-  if (theme === "dark" || theme === "light") document.documentElement.setAttribute("data-theme", theme);
+
+  // ---------- 어두운 화면 / 밝은 화면 ----------
+  // 오른쪽 아래 버튼으로 바로 바꿔요. 고른 건 이 칠판에 기억해 두고 주소(?theme=)에도 적어 둬서
+  // 자동 새로고침 뒤에도 그대로예요. 아직 안 골랐으면 기기 설정(다크 모드)을 따라가요.
+  var TKEY = "board-theme";
+  function systemDark() {
+    try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); } catch (e) { return false; }
+  }
+  function curTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    return t === "dark" || t === "light" ? t : (systemDark() ? "dark" : "light");
+  }
+  function themeLabel() {
+    var b = $("themeBtn");
+    if (b) b.textContent = curTheme() === "dark" ? "밝은 화면" : "어두운 화면";
+  }
+  function applyTheme(t) {
+    if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+    themeLabel();
+  }
+  var savedTheme = null;
+  try { savedTheme = localStorage.getItem(TKEY); } catch (e) {}
+  applyTheme(params.get("theme") || savedTheme);
+  $("themeBtn").addEventListener("click", function () {
+    var t = curTheme() === "dark" ? "light" : "dark";
+    applyTheme(t);
+    try { localStorage.setItem(TKEY, t); } catch (e) {}
+    try {
+      params.set("theme", t);
+      history.replaceState(null, "", location.pathname + "?" + params.toString() + location.hash);
+    } catch (e) {}
+  });
+  try {
+    var mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+    if (mq && mq.addListener) mq.addListener(themeLabel);
+  } catch (e) {}
 
   $("eventName").textContent = A.config.eventName || "";
   if (A.demo) $("demoTag").hidden = false;
 
   var statusMap = {}, infoMap = {}, gotStatus = false, gotInfo = false, connErr = false, mode = "";
+  var gradeSel = 0, openId = null, curList = [];
+  var BOARD = A.config.board || {};
+  // 아무도 안 만지면 상세 팝업은 이 시간 뒤 닫히고, 학년 보기는 '전체'로 돌아와요 (다음 사람을 위해)
+  var DETAIL_MS = Math.max(5, Number(BOARD.detailSec) || 30) * 1000;
+  var GRADE_MS = Math.max(10, Number(BOARD.gradeResetSec) || 60) * 1000;
 
   // ---------- 시계 ----------
   function pad(n) { return (n < 10 ? "0" : "") + n; }
@@ -162,11 +289,46 @@
   tickClock(); setInterval(tickClock, 10000);
 
   // ---------- 층별 칸 (교실이 추가·삭제돼 목록이 바뀔 때만 다시 만들어요) ----------
-  var tiles = {}, builtSig = null;
+  var tiles = {}, builtSig = null, gradeBtns = [];
   function sigOf(list) {
-    return (gotInfo ? "i:" : "l:") + list.map(function (r) { return [r.id, r.floor].join("|"); }).join(",");
+    return (gotInfo ? "i:" : "l:") + list.map(function (r) { return [r.id, r.floor, r.grade].join("|"); }).join(",");
+  }
+  function tappable(node, fn) {
+    node.setAttribute("role", "button");
+    node.setAttribute("tabindex", "0");
+    node.addEventListener("click", function (ev) {
+      // 손가락·마우스로 누른 경우엔 테두리(포커스 표시)가 남지 않게 해요. 키보드로 누를 때만 보여요.
+      if (ev && ev.detail) { try { node.blur(); } catch (e) {} }
+      fn();
+    });
+    node.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " " || ev.keyCode === 13 || ev.keyCode === 32) { ev.preventDefault(); fn(); }
+    });
+  }
+  function setGrade(g) {
+    gradeSel = g;
+    gradeBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-g") === String(g) ? "true" : "false"); });
+    render();
+  }
+  function buildGrades(list) {
+    var gl = A.grades(list);
+    if (gradeSel && gl.indexOf(gradeSel) < 0) gradeSel = 0;
+    var box = $("grades");
+    box.innerHTML = "";
+    gradeBtns = [];
+    [0].concat(gl).forEach(function (g) {
+      var b = A.el("button", "chip", g ? g + "학년" : "전체");
+      b.type = "button";
+      b.setAttribute("data-g", String(g));
+      b.setAttribute("aria-pressed", g === gradeSel ? "true" : "false");
+      b.addEventListener("click", function () { setGrade(g); });
+      gradeBtns.push(b);
+      box.appendChild(b);
+    });
+    $("gradeCard").hidden = gl.length < 2;   // 학년이 하나뿐이면 고를 필요가 없어요
   }
   function build(list) {
+    buildGrades(list);
     var floors = A.floors(list);
     var maxCols = 1;
     floors.forEach(function (f) { maxCols = Math.max(maxCols, list.filter(function (r) { return r.floor === f; }).length); });
@@ -192,6 +354,7 @@
         var t = A.el("div", "room-title");
         var hrs = A.el("div", "room-hours");
         d.appendChild(top); d.appendChild(t); d.appendChild(hrs);
+        tappable(d, function () { openDetail(r.id); });
         hall.appendChild(d);
         tiles[r.id] = { box: d, lv: lv, title: t, hours: hrs };
       });
@@ -207,27 +370,32 @@
     // 교실 목록(추가·삭제 반영)을 한 번 받은 뒤에 그려요. 지운 교실이 잠깐 보이는 걸 막기 위해서예요.
     var list = gotInfo ? A.mergeAll(infoMap) : [];
     if (sigOf(list) !== builtSig) build(list);
+    curList = list;
     var items = list.map(function (r) { return { r: r, e: A.effective(statusMap[r.id], now) }; });
+    var shown = function (it) { return !gradeSel || it.r.grade === gradeSel; };
     items.forEach(function (it) {
       var t = tiles[it.r.id];
       t.box.setAttribute("data-l", A.levelKey(it.e.level));
       t.lv.textContent = A.levelLabel(it.e.level);
       t.title.textContent = it.r.title;
       t.hours.textContent = it.r.hours || "";
+      if (shown(it)) t.box.classList.remove("dim"); else t.box.classList.add("dim");
+      t.box.setAttribute("aria-label", it.r.name + ", " + it.r.title + ", " + A.levelLabel(it.e.level));
     });
 
     var q = $("quiet");
     q.innerHTML = "";
-    var quiet = items.filter(function (it) { return it.e.level === 0; })
+    var quiet = items.filter(function (it) { return it.e.level === 0 && shown(it); })
       .sort(function (a, b) { return (a.e.count || 0) - (b.e.count || 0); })
       .slice(0, 5);
     if (!gotStatus) q.appendChild(A.el("p", "quiet-empty", "교실 상황을 불러오는 중이에요."));
     else if (!list.length) { /* 등록된 교실이 없을 땐 왼쪽 안내만 보여줘요 */ }
-    else if (!quiet.length) q.appendChild(A.el("p", "quiet-empty", "지금은 여유 있는 교실이 없어요."));
+    else if (!quiet.length) q.appendChild(A.el("p", "quiet-empty", gradeSel ? gradeSel + "학년에는 지금 여유 있는 교실이 없어요." : "지금은 여유 있는 교실이 없어요."));
     else quiet.forEach(function (it) {
       var d = A.el("div", "quiet-item");
       d.appendChild(A.el("b", null, it.r.id));
       d.appendChild(A.el("span", null, it.r.title));
+      tappable(d, function () { openDetail(it.r.id); });
       q.appendChild(d);
     });
 
@@ -240,7 +408,59 @@
     else { st = "ok"; text = "실시간 · 교실 카메라가 사람 수만 세요"; }
     s.setAttribute("data-s", st);
     $("statusText").textContent = text;
+
+    if (openId) fillDetail(openId);
   }
+
+  // ---------- 교실 상세 팝업 ----------
+  function stateText(e, now) {
+    if (e.source === "override") return "담당자가 직접 알려줬어요 · " + A.ago(e.at, now);
+    if (e.source === "auto") return (typeof e.count === "number" ? "카메라 기준 약 " + e.count + "명 · " : "") + A.ago(e.at, now) + " 갱신";
+    if (e.source === "stale") return "최근 소식이 없어요 · 마지막 " + A.ago(e.at, now);
+    return "아직 정보가 없어요";
+  }
+  function fillDetail(id) {
+    var now = Date.now();
+    var r = null;
+    curList.forEach(function (x) { if (x.id === id) r = x; });
+    if (!r) { closeDetail(); return; }   // 보는 중에 담당자가 교실을 지운 경우
+    var e = A.effective(statusMap[id], now);
+    $("dBand").setAttribute("data-l", A.levelKey(e.level));
+    $("dLevel").textContent = A.levelLabel(e.level);
+    $("dState").textContent = stateText(e, now);
+    $("dRoom").textContent = r.name;
+    $("dTitle").textContent = r.title;
+    $("dDesc").textContent = r.desc || "";
+    $("dDesc").hidden = !r.desc;
+    $("dHours").textContent = r.hours || "–";
+    $("dWhere").textContent = r.floor + "층 " + r.name;
+  }
+  function openDetail(id) {
+    openId = id;
+    touched();
+    fillDetail(id);
+    if (openId) $("detail").hidden = false;
+  }
+  function closeDetail() {
+    openId = null;
+    $("detail").hidden = true;
+  }
+  // 팝업 안이든 밖이든 누르면 닫혀요 (전자칠판은 여러 사람이 쓰니 닫기 쉬운 게 좋아요)
+  $("detail").addEventListener("click", closeDetail);
+  document.addEventListener("keydown", function (ev) {
+    if (openId && (ev.key === "Escape" || ev.keyCode === 27)) closeDetail();
+  });
+
+  // 한참 아무도 안 만지면 처음 화면으로 돌아가요
+  var lastTouch = Date.now();
+  function touched() { lastTouch = Date.now(); }
+  ["mousedown", "touchstart", "keydown"].forEach(function (ev) { document.addEventListener(ev, touched, true); });
+  setInterval(function () {
+    var idle = Date.now() - lastTouch;
+    if (openId && idle > DETAIL_MS) closeDetail();
+    if (gradeSel && idle > GRADE_MS) setGrade(0);
+  }, 1000);
+
   render();
   setInterval(render, 20000);
   // 교실 정보가 8초 안에 안 오면 config.js 기본 목록으로라도 보여줘요
@@ -273,7 +493,6 @@
   // (2) 하루 종일 켜 둘 때를 대비해 몇 시간에 한 번은 그냥 새로고침해요. (board.reloadHours)
   // 두 경우 모두 사이트가 지금 열리는지 먼저 확인해요.
   // (서버가 잠깐 죽었을 때 새로고침하면 빈 화면으로 멈추기 때문)
-  var BOARD = A.config.board || {};
   var CHECK_MS = Math.max(5, Number(BOARD.checkSec) || 60) * 1000;                    // 최소 5초
   var RELOAD_MS = Math.max(60000, (Number(BOARD.reloadHours) || 3) * 3600 * 1000);   // 최소 1분
   var WATCH = ["board.html", "config.js", "common.js", "style.css"];

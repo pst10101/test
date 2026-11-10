@@ -132,7 +132,6 @@
       <h1>혼잡도 관리</h1>
     </div>
     <div class="head-side">
-      <a href="./" id="visitorLink" target="_blank" rel="noopener">방문자 화면 열기</a>
       <a href="board.html" target="_blank" rel="noopener">전자칠판 화면 열기</a>
       <span id="who"></span>
       <button type="button" id="logout">로그아웃</button>
@@ -152,7 +151,7 @@
     <div class="panel-head">
       <div>
         <h2 id="roomsTitle">교실별 상태<span class="count" id="roomCount"></span></h2>
-        <p>‘수정’으로 프로그램 정보를, ‘삭제’로 반을 지울 수 있어요. 바꾸면 방문자 화면에 바로 반영돼요.</p>
+        <p>‘수정’으로 프로그램 정보를, ‘삭제’로 반을 지울 수 있어요. 바꾸면 전자칠판에 바로 반영돼요.</p>
       </div>
       <div class="ph-actions">
         <button type="button" class="primary" id="addBtn" disabled>반 추가</button>
@@ -164,7 +163,7 @@
         <tr>
           <th scope="col">교실</th>
           <th scope="col">프로그램</th>
-          <th scope="col">방문자 화면</th>
+          <th scope="col">전자칠판</th>
           <th scope="col">태블릿</th>
           <th scope="col">인원</th>
           <th scope="col">배터리</th>
@@ -178,7 +177,7 @@
   <section class="panel" id="removedPanel" hidden>
     <details class="links">
       <summary id="removedSummary">삭제한 반</summary>
-      <p class="rm-note">삭제한 반은 방문자 화면에서 사라져 있어요. ‘되살리기’를 누르면 그대로 돌아와요.</p>
+      <p class="rm-note">삭제한 반은 전자칠판에서 사라져 있어요. ‘되살리기’를 누르면 그대로 돌아와요.</p>
       <div class="link-list" id="removedList"></div>
       <div class="rm-foot"><button type="button" id="restoreAll">모두 되살리기</button></div>
     </details>
@@ -341,7 +340,7 @@
       prog.appendChild(pBox); prog.appendChild(btns);
       cProg.appendChild(prog);
 
-      var cVis = td("방문자 화면");
+      var cVis = td("전자칠판");
       var vStack = A.el("div", "stack"); var vPill = A.el("span", "pill"); var vSub = A.el("span", "sub");
       vStack.appendChild(vPill); vStack.appendChild(vSub); cVis.appendChild(vStack);
 
@@ -502,7 +501,7 @@
     if (!r || !store) return;
     ask({
       title: "‘" + r.name + "’을(를) 삭제할까요?",
-      text: "방문자 화면과 전자칠판에서 바로 사라져요. 화면 아래 ‘삭제한 반’에서 언제든 되살릴 수 있어요.",
+      text: "전자칠판에서 바로 사라져요. 화면 아래 ‘삭제한 반’에서 언제든 되살릴 수 있어요.",
       ok: "삭제",
       action: function () {
         return store.saveRoom(id, { removed: true }).then(function () { return r.name + "을(를) 삭제했어요"; });
@@ -515,7 +514,7 @@
     if (!ids.length || !store) return;
     ask({
       title: "교실 " + ids.length + "개를 모두 삭제할까요?",
-      text: "지금 보이는 모든 반이 방문자 화면과 전자칠판에서 사라져요. 화면 아래 ‘삭제한 반’에서 되살릴 수 있어요.",
+      text: "지금 보이는 모든 반이 전자칠판에서 사라져요. 화면 아래 ‘삭제한 반’에서 되살릴 수 있어요.",
       ok: "모두 삭제",
       action: function () {
         return Promise.all(ids.map(function (id) { return store.saveRoom(id, { removed: true }); }))
