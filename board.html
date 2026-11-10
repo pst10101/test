@@ -265,17 +265,77 @@
   // 15초 안에 실시간 연결이 안 되면 (옛날 브라우저 등) 받아오기 방식으로 바꿔요
   setTimeout(function () { if (!gotStatus) fallback(); }, 15000);
 
-  // 하루 종일 켜 둘 때를 대비해 3시간마다 새로고침.
-  // 단, 사이트(GitHub 등)가 지금 열리는지 먼저 확인하고, 안 열리면 10분 뒤에 다시 확인해요.
+  // ---------- 자동 새로고침 ----------
+  // (1) 사이트 파일이 바뀌었는지 1분마다 확인하고, 바뀌었으면 바로 새로고침해요. (config.js의 board.checkSec)
+  //     혼잡도 숫자는 새로고침 없이도 실시간으로 바뀌어요. 이건 '사이트 자체를 고쳤을 때'를 위한 거예요.
+  //     매번 무조건 새로고침하지 않는 이유: 새로고침할 때마다 서버에서 교실 정보를 전부 다시 읽어서
+  //     무료 한도를 빨리 쓰고, 전체 화면도 풀리기 때문이에요.
+  // (2) 하루 종일 켜 둘 때를 대비해 몇 시간에 한 번은 그냥 새로고침해요. (board.reloadHours)
+  // 두 경우 모두 사이트가 지금 열리는지 먼저 확인해요.
   // (서버가 잠깐 죽었을 때 새로고침하면 빈 화면으로 멈추기 때문)
-  function safeReload() {
-    var retry = function () { setTimeout(safeReload, 10 * 60000); };
-    if (navigator.onLine === false || !window.fetch) { retry(); return; }
-    fetch("board.html", { cache: "no-store" }).then(function (r) {
-      if (r.ok) location.reload(); else retry();
-    }, retry);
+  var BOARD = A.config.board || {};
+  var CHECK_MS = Math.max(5, Number(BOARD.checkSec) || 60) * 1000;                    // 최소 5초
+  var RELOAD_MS = Math.max(60000, (Number(BOARD.reloadHours) || 3) * 3600 * 1000);   // 최소 1분
+  var WATCH = ["board.html", "config.js", "common.js", "style.css"];
+  var baseline = null;          // 지금 화면이 쓰고 있는 파일 내용
+  var loadedAt = Date.now();
+
+  function getFile(url, fresh, cb) {
+    var done = false;
+    var finish = function (t) { if (!done) { done = true; cb(t); } };
+    try {
+      var x = new XMLHttpRequest();
+      x.open("GET", url, true);
+      // max-age=0: 브라우저에 저장해 둔 것 말고 서버에 지금 올라와 있는 내용을 확인해요.
+      // 안 바뀌었으면 내용은 다시 안 받아서 아주 가벼워요.
+      if (fresh) x.setRequestHeader("Cache-Control", "max-age=0");
+      x.timeout = 15000;
+      x.onload = function () { finish(x.status >= 200 && x.status < 300 ? x.responseText : null); };
+      x.onerror = x.ontimeout = x.onabort = function () { finish(null); };
+      x.send();
+    } catch (e) { finish(null); }
   }
-  setTimeout(safeReload, 3 * 3600 * 1000);
+  function getAll(fresh, cb) {
+    var out = {}, left = WATCH.length, failed = false;
+    WATCH.forEach(function (u) {
+      getFile(u, fresh, function (t) {
+        if (t === null) failed = true; else out[u] = t;
+        if (--left === 0) cb(failed ? null : out);
+      });
+    });
+  }
+
+  // 새로고침만 계속 반복하는 일을 막아요 (켜지자마자 또 하는 새로고침은 30분에 3번까지)
+  var RKEY = "board-auto-reloads";
+  function recentReloads() {
+    try {
+      var now = Date.now();
+      return JSON.parse(sessionStorage.getItem(RKEY) || "[]").filter(function (t) { return now - t < 30 * 60000; });
+    } catch (e) { return []; }
+  }
+  function noteReload() {
+    try { var a = recentReloads(); a.push(Date.now()); sessionStorage.setItem(RKEY, JSON.stringify(a)); } catch (e) {}
+  }
+
+  function checkSite() {
+    if (navigator.onLine === false) return;
+    getAll(true, function (now) {
+      if (!now) return;                               // 사이트가 안 열리면 그대로 둬요
+      if (!baseline) { baseline = now; return; }
+      var changed = WATCH.some(function (u) { return now[u] !== baseline[u]; });
+      var old = Date.now() - loadedAt > RELOAD_MS;
+      if (!changed && !old) return;
+      if (changed && Date.now() - loadedAt < 3 * 60000) {
+        // 켜진 지 3분도 안 됐는데 또 바뀌었다면 같은 새로고침을 반복하는 것일 수 있어서 횟수를 세요.
+        // (오래 켜져 있다가 바뀐 경우는 세지 않고 항상 새로고침해요)
+        if (recentReloads().length >= 3) { if (!old) return; }
+        else noteReload();
+      }
+      location.reload();
+    });
+  }
+  getAll(false, function (m) { baseline = m; });      // 지금 화면이 쓰는 내용을 기억해 둬요
+  setInterval(checkSite, CHECK_MS);
 
   // ---------- 화면 켜짐 유지 · 전체 화면 · 커서 숨기기 ----------
   var wakeLock = null;
